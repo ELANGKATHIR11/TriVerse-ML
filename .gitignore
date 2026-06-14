@@ -85,3 +85,5 @@ trained_models/
 triverse_boot.log
 _loading.html
 **/_loading.html
+logs/
+**/logs/

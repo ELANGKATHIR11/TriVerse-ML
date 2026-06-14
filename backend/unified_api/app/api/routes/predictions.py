@@ -25,6 +25,19 @@ class DiseaseInferenceRequest(BaseModel):
 class HandwritingInferenceRequest(BaseModel):
     image_b64: str  # Base64 encoded grayscale 28x28 image string
 
+def clean_for_json(val: Any) -> Any:
+    if isinstance(val, dict):
+        return {k: clean_for_json(v) for k, v in val.items()}
+    elif isinstance(val, (list, tuple)):
+        return [clean_for_json(v) for v in val]
+    elif isinstance(val, (np.float32, np.float64, np.floating)):
+        return float(val)
+    elif isinstance(val, (np.int32, np.int64, np.integer)):
+        return int(val)
+    elif isinstance(val, np.ndarray):
+        return clean_for_json(val.tolist())
+    return val
+
 @router.post("/credit")
 async def predict_credit(
     req: CreditInferenceRequest,
@@ -48,6 +61,7 @@ async def predict_credit(
 
     try:
         res = CreditInferenceService.predict(req.features, model_name=model_name)
+        res = clean_for_json(res)
     except FileNotFoundError as fnf:
         # If model is not found, fallback to training default or return 500
         raise HTTPException(status_code=500, detail=str(fnf))
@@ -98,6 +112,7 @@ async def predict_disease(
 
     try:
         res = DiseaseInferenceService.predict(req.features, model_name=model_name)
+        res = clean_for_json(res)
     except FileNotFoundError as fnf:
         raise HTTPException(status_code=500, detail=str(fnf))
     except Exception as e:
@@ -145,6 +160,7 @@ async def predict_handwriting(
 
     try:
         res = HandwritingInferenceService.predict(req.image_b64, model_name=model_name)
+        res = clean_for_json(res)
     except FileNotFoundError as fnf:
         raise HTTPException(status_code=500, detail=str(fnf))
     except Exception as e:

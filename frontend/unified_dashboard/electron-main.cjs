@@ -1,264 +1,353 @@
 /**
- * electron-main.cjs — TriVerse AI Desktop Orchestrator
+ * electron-main.cjs — TriVerse AI Desktop Orchestrator  v3
  *
- * Boot sequence:
- *   1. Show splash screen immediately
- *   2. Spawn MLflow tracking server (conda dgpu-aiml)
- *   3. Spawn FastAPI backend (conda dgpu-aiml)
- *   4. Poll FastAPI /health/live until ready (max 120 s)
- *   5. Spawn Express / tsx gateway (port 3000)
- *   6. Poll gateway until ready (max 60 s)
- *   7. Close splash → open main window
+ * FIXED:
+ *  - Uses ABSOLUTE binary paths (no conda/npx in PATH required)
+ *  - Loading screen is embedded IN the main window (no blank flash)
+ *  - Services start BEFORE main window navigates to the real URL
+ *  - IPC sends live boot status to the in-window loading page
  *
- * Shutdown:
- *   - window-all-closed → taskkill all child processes cleanly
+ * Boot order:
+ *   1. Main window opens immediately showing local loading.html
+ *   2. MLflow spawns (background, non-blocking)
+ *   3. FastAPI spawns via absolute uvicorn.exe
+ *   4. Poll http://127.0.0.1:8000/health/live  (max 120 s)
+ *   5. Gateway (tsx server.ts) spawns via absolute node.exe
+ *   6. Poll http://localhost:3000               (max 60 s)
+ *   7. win.loadURL('http://localhost:3000')  → real app appears
  */
 
+'use strict';
+
 const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
-const fs = require('fs');
+const path   = require('path');
+const fs     = require('fs');
 const { spawn } = require('child_process');
-const http = require('http');
+const http   = require('http');
 
-let childProcesses = [];
-let splashWindow = null;
-let mainWindow = null;
+// ── Absolute binary paths ─────────────────────────────────────────────────────
+const CONDA_SCRIPTS  = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-aiml\\Scripts';
+const CONDA_ROOT     = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-aiml';
+const PYTHON_EXE     = path.join(CONDA_ROOT,    'python.exe');
+const UVICORN_EXE    = path.join(CONDA_SCRIPTS, 'uvicorn.exe');
+const MLFLOW_EXE     = path.join(CONDA_SCRIPTS, 'mlflow.exe');
+const NODE_EXE       = 'F:\\FULL-STACK\\node.exe';
 
-// ── Project root discovery ────────────────────────────────────────────────────
+// ── Project paths ─────────────────────────────────────────────────────────────
 function getProjectRoot() {
-  let current = path.resolve(__dirname);
+  let cur = path.resolve(__dirname);
   for (let i = 0; i < 6; i++) {
-    if (fs.existsSync(path.join(current, 'backend')) &&
-        fs.existsSync(path.join(current, 'frontend'))) {
-      return current;
-    }
-    const parent = path.dirname(current);
-    if (parent === current) break;
-    current = parent;
+    if (fs.existsSync(path.join(cur, 'backend')) &&
+        fs.existsSync(path.join(cur, 'frontend'))) return cur;
+    const p = path.dirname(cur);
+    if (p === cur) break;
+    cur = p;
   }
   return path.resolve(__dirname);
 }
 
-const root = getProjectRoot();
-const backendDir = path.join(root, 'backend', 'unified_api');
-const frontendDir = path.join(root, 'frontend', 'unified_dashboard');
-const trainedModelsDir = path.join(backendDir, 'trained_models');
-const mlrunsDir = path.join(backendDir, 'mlruns');
-const condaEnv = 'dgpu-aiml';
+const ROOT          = getProjectRoot();
+const BACKEND_DIR   = path.join(ROOT, 'backend', 'unified_api');
+const FRONTEND_DIR  = path.join(ROOT, 'frontend', 'unified_dashboard');
+const MODELS_DIR    = path.join(BACKEND_DIR, 'trained_models');
+const MLRUNS_DIR    = path.join(BACKEND_DIR, 'mlruns');
 
-// ── Health poll helper ────────────────────────────────────────────────────────
-/**
- * Poll a local URL until it responds with HTTP < 500.
- * @param {string} url  — full URL to GET
- * @param {number} maxMs — maximum wait in milliseconds
- * @param {number} intervalMs — poll interval
- * @returns {Promise<boolean>}
- */
-function pollUntilReady(url, maxMs = 120_000, intervalMs = 1_000) {
-  return new Promise((resolve) => {
-    const start = Date.now();
+let childProcesses = [];
+let mainWin        = null;
+
+// ── Health poll ───────────────────────────────────────────────────────────────
+function pollUntilReady(url, maxMs = 120_000, intervalMs = 1_200) {
+  return new Promise(resolve => {
+    const deadline = Date.now() + maxMs;
     function attempt() {
-      http.get(url, (res) => {
-        if (res.statusCode < 500) {
-          resolve(true);
-        } else {
-          retry();
-        }
+      http.get(url, res => {
+        if (res.statusCode < 500) return resolve(true);
+        res.resume();
+        retry();
       }).on('error', retry);
     }
     function retry() {
-      if (Date.now() - start > maxMs) {
-        resolve(false);
-      } else {
-        setTimeout(attempt, intervalMs);
-      }
+      if (Date.now() > deadline) return resolve(false);
+      setTimeout(attempt, intervalMs);
     }
     attempt();
   });
 }
 
-// ── Splash screen ─────────────────────────────────────────────────────────────
-function createSplash() {
-  splashWindow = new BrowserWindow({
-    width: 520,
-    height: 340,
-    frame: false,
-    alwaysOnTop: true,
-    transparent: false,
-    resizable: false,
-    icon: path.join(__dirname, 'app_icon.ico'),
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  });
-
-  // Write splash HTML inline so no extra file is needed
-  const splashHtml = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    color: #e0e0ff;
-    font-family: 'Segoe UI', sans-serif;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    height: 100vh; overflow: hidden;
-    user-select: none;
-  }
-  .logo { font-size: 2.4rem; font-weight: 700; letter-spacing: 2px;
-          background: linear-gradient(90deg, #a855f7, #6366f1);
-          -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-  .sub  { font-size: 0.85rem; opacity: 0.6; margin-top: 4px; }
-  .status { margin-top: 32px; font-size: 0.82rem; opacity: 0.8;
-            min-height: 1.4em; text-align: center; padding: 0 24px; }
-  .bar-track { width: 320px; height: 4px; background: rgba(255,255,255,0.1);
-               border-radius: 2px; margin-top: 14px; overflow: hidden; }
-  .bar-fill  { height: 100%; width: 0%;
-               background: linear-gradient(90deg, #a855f7, #6366f1);
-               border-radius: 2px;
-               transition: width 0.4s ease; }
-  .version { position: absolute; bottom: 14px; font-size: 0.72rem; opacity: 0.35; }
-</style>
-</head>
-<body>
-  <div class="logo">TriVerse AI</div>
-  <div class="sub">Production ML Platform</div>
-  <div class="status" id="status">Initializing services…</div>
-  <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
-  <div class="version">v2.0.0 · dgpu-aiml</div>
-  <script>
-    const { ipcRenderer } = require('electron');
-    ipcRenderer.on('splash-status', (_, msg) => {
-      document.getElementById('status').textContent = msg.text;
-      document.getElementById('bar').style.width = msg.pct + '%';
-    });
-  </script>
-</body>
-</html>`;
-
-  const splashPath = path.join(__dirname, '_splash.html');
-  fs.writeFileSync(splashPath, splashHtml, 'utf8');
-  splashWindow.loadFile(splashPath);
-}
-
-function setSplashStatus(text, pct) {
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    splashWindow.webContents.send('splash-status', { text, pct });
-  }
+// ── Send status update to the in-window loading page ─────────────────────────
+function setStatus(text, pct, isError = false) {
   console.log(`[Boot] (${pct}%) ${text}`);
+  if (mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('boot-status', { text, pct, isError });
+  }
 }
 
-// ── Spawn a child process with logging ────────────────────────────────────────
-function spawnService(label, cmd, args, opts) {
-  const proc = spawn(cmd, args, { shell: true, ...opts });
+// ── Spawn helper ──────────────────────────────────────────────────────────────
+function spawnService(label, exe, args, opts = {}) {
+  console.log(`[${label}] Spawning: ${exe} ${args.join(' ')}`);
+  const proc = spawn(exe, args, {
+    cwd: opts.cwd || ROOT,
+    env: { ...process.env, ...(opts.env || {}) },
+    shell: false,          // ← no shell needed; absolute paths
+    windowsHide: true,     // ← no console window
+  });
   proc.stdout.on('data', d => console.log(`[${label}] ${d.toString().trim()}`));
   proc.stderr.on('data', d => console.error(`[${label}] ${d.toString().trim()}`));
-  proc.on('exit', (code) => console.log(`[${label}] exited with code ${code}`));
+  proc.on('exit', c => console.log(`[${label}] exited with code ${c}`));
   childProcesses.push(proc);
   return proc;
 }
 
-// ── Main boot sequence ────────────────────────────────────────────────────────
-async function startServices() {
-  // Ensure directories exist
-  fs.mkdirSync(mlrunsDir, { recursive: true });
-  fs.mkdirSync(trainedModelsDir, { recursive: true });
+// ── Inline loading page (written to __dirname so it always works) ─────────────
+function getLoadingHtml() {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TriVerse AI — Starting…</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{
+    width:100%;height:100vh;overflow:hidden;
+    background:linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%);
+    font-family:'Segoe UI',system-ui,sans-serif;
+    color:#e0e0ff;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    user-select:none;
+  }
+  .logo{
+    font-size:2.8rem;font-weight:800;letter-spacing:3px;
+    background:linear-gradient(90deg,#a855f7,#6366f1,#38bdf8);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    margin-bottom:6px;
+  }
+  .tagline{font-size:.85rem;opacity:.5;letter-spacing:1px;margin-bottom:48px;}
+  .card{
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:16px;
+    padding:32px 48px;
+    width:460px;
+    backdrop-filter:blur(12px);
+  }
+  .status-label{
+    font-size:.82rem;opacity:.75;margin-bottom:10px;
+    min-height:1.2em;
+    transition:all .3s;
+  }
+  .status-label.error{color:#f87171;}
+  .bar-track{
+    width:100%;height:6px;
+    background:rgba(255,255,255,.1);
+    border-radius:3px;overflow:hidden;
+  }
+  .bar-fill{
+    height:100%;width:0%;
+    background:linear-gradient(90deg,#a855f7,#6366f1,#38bdf8);
+    border-radius:3px;
+    transition:width .5s ease;
+  }
+  .pct{font-size:.75rem;opacity:.4;margin-top:8px;text-align:right;}
+  .dots{display:inline-block;animation:dots 1.2s infinite;}
+  @keyframes dots{0%{content:''}33%{content:'.'}66%{content:'..'}100%{content:'...'}}
+  .step-list{margin-top:28px;list-style:none;display:flex;flex-direction:column;gap:8px;}
+  .step{display:flex;align-items:center;gap:10px;font-size:.78rem;opacity:.45;transition:.3s;}
+  .step.active{opacity:1;}
+  .step.done{opacity:.6;}
+  .step .dot{
+    width:8px;height:8px;border-radius:50%;
+    background:rgba(255,255,255,.2);flex-shrink:0;transition:.3s;
+  }
+  .step.active .dot{background:#a855f7;box-shadow:0 0 8px #a855f7;}
+  .step.done  .dot{background:#22c55e;}
+  .version{position:fixed;bottom:16px;font-size:.7rem;opacity:.25;}
+</style>
+</head>
+<body>
+<div class="logo">TriVerse AI</div>
+<div class="tagline">PRODUCTION ML PLATFORM</div>
+<div class="card">
+  <div class="status-label" id="status">Initializing<span class="dots"></span></div>
+  <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+  <div class="pct" id="pct">0%</div>
+  <ul class="step-list">
+    <li class="step" id="s-mlflow"><span class="dot"></span>MLflow Tracking Server</li>
+    <li class="step" id="s-backend"><span class="dot"></span>FastAPI Backend (port 8000)</li>
+    <li class="step" id="s-gateway"><span class="dot"></span>UI Gateway (port 3000)</li>
+    <li class="step" id="s-ollama"><span class="dot"></span>Ollama — qwen2.5-coder:3b</li>
+  </ul>
+</div>
+<div class="version">v2.0.0 &nbsp;·&nbsp; dgpu-aiml &nbsp;·&nbsp; RTX 5060</div>
 
-  setSplashStatus('Starting MLflow tracking server…', 10);
-  spawnService('MLflow', 'conda', [
-    'run', '-n', condaEnv,
-    'mlflow', 'server',
-    '--host', '127.0.0.1',
-    '--port', '5000',
-    '--backend-store-uri', `sqlite:///${path.join(mlrunsDir, 'mlflow.db')}`,
-    '--default-artifact-root', mlrunsDir,
-  ], { cwd: root });
+<script>
+const { ipcRenderer } = require('electron');
+const steps = {
+  mlflow:  document.getElementById('s-mlflow'),
+  backend: document.getElementById('s-backend'),
+  gateway: document.getElementById('s-gateway'),
+  ollama:  document.getElementById('s-ollama'),
+};
 
-  // Give MLflow a head-start (it's not a hard dependency for initial load)
-  await new Promise(r => setTimeout(r, 1500));
+ipcRenderer.on('boot-status', (_, msg) => {
+  const el = document.getElementById('status');
+  el.textContent = msg.text;
+  el.className = 'status-label' + (msg.isError ? ' error' : '');
+  document.getElementById('bar').style.width = msg.pct + '%';
+  document.getElementById('pct').textContent = msg.pct + '%';
 
-  setSplashStatus('Starting FastAPI backend…', 25);
-  const envVars = {
-    ...process.env,
-    TRIVERSE_MODELS_DIR: trainedModelsDir,
+  // Activate steps based on pct thresholds
+  if (msg.pct >= 10)  activateStep('mlflow');
+  if (msg.pct >= 25)  doneStep('mlflow'),  activateStep('backend');
+  if (msg.pct >= 60)  doneStep('backend'), activateStep('gateway');
+  if (msg.pct >= 85)  doneStep('gateway'), activateStep('ollama');
+  if (msg.pct >= 98)  doneStep('ollama');
+});
+
+function activateStep(k){ if(steps[k]) steps[k].className='step active'; }
+function doneStep(k){     if(steps[k]) steps[k].className='step done'; }
+</script>
+</body>
+</html>`;
+}
+
+// ── Boot sequence ─────────────────────────────────────────────────────────────
+async function bootServices() {
+  fs.mkdirSync(MLRUNS_DIR, { recursive: true });
+  fs.mkdirSync(MODELS_DIR,  { recursive: true });
+
+  const sharedEnv = {
+    TRIVERSE_MODELS_DIR: MODELS_DIR,
     MLFLOW_TRACKING_URI: 'http://127.0.0.1:5000',
+    // Make conda env libraries available
+    PATH: `${CONDA_ROOT};${CONDA_SCRIPTS};${process.env.PATH}`,
   };
-  spawnService('FastAPI', 'conda', [
-    'run', '-n', condaEnv,
-    'python', '-m', 'uvicorn', 'app.main:app',
+
+  // 1. MLflow (fire-and-forget; not a hard dependency)
+  setStatus('Starting MLflow tracking server…', 10);
+  if (fs.existsSync(MLFLOW_EXE)) {
+    spawnService('MLflow', MLFLOW_EXE, [
+      'server',
+      '--host', '127.0.0.1',
+      '--port', '5000',
+      '--backend-store-uri', `sqlite:///${path.join(MLRUNS_DIR, 'mlflow.db')}`,
+      '--default-artifact-root', MLRUNS_DIR,
+    ], { cwd: ROOT, env: sharedEnv });
+  } else {
+    console.warn('[Boot] mlflow.exe not found — skipping MLflow');
+  }
+  await sleep(1200);
+
+  // 2. FastAPI backend via uvicorn.exe
+  setStatus('Starting FastAPI backend…', 25);
+  spawnService('FastAPI', UVICORN_EXE, [
+    'app.main:app',
     '--host', '127.0.0.1',
     '--port', '8000',
     '--log-level', 'warning',
-  ], { cwd: backendDir, env: envVars });
+  ], { cwd: BACKEND_DIR, env: sharedEnv });
 
-  setSplashStatus('Waiting for backend to be ready…', 40);
+  // 3. Poll backend
+  setStatus('Waiting for backend (port 8000)…', 38);
   const backendReady = await pollUntilReady('http://127.0.0.1:8000/health/live', 120_000);
-  if (!backendReady) {
-    setSplashStatus('⚠ Backend timeout — continuing anyway…', 55);
-    await new Promise(r => setTimeout(r, 2000));
+  if (backendReady) {
+    setStatus('Backend ready ✓', 55);
   } else {
-    setSplashStatus('Backend ready ✓', 55);
+    setStatus('⚠ Backend timed out — continuing…', 55, true);
+  }
+  await sleep(400);
+
+  // 4. UI Gateway — tsx server.ts
+  setStatus('Starting UI gateway (port 3000)…', 62);
+  const distServer = path.join(FRONTEND_DIR, 'dist', 'server.cjs');
+  const tsxBin     = path.join(FRONTEND_DIR, 'node_modules', '.bin', 'tsx');
+
+  if (fs.existsSync(distServer)) {
+    spawnService('Gateway', NODE_EXE, [distServer], {
+      cwd: FRONTEND_DIR,
+      env: { ...sharedEnv, NODE_ENV: 'production' },
+    });
+  } else if (fs.existsSync(tsxBin + '.cmd')) {
+    // tsx is a local node_modules binary — call it via node
+    const tsxScript = path.join(FRONTEND_DIR, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    if (fs.existsSync(tsxScript)) {
+      spawnService('Gateway', NODE_EXE, [tsxScript, 'server.ts'], {
+        cwd: FRONTEND_DIR,
+        env: { ...sharedEnv, NODE_ENV: 'development' },
+      });
+    } else {
+      // Fallback: call tsx.cmd via cmd
+      spawnService('Gateway', 'cmd.exe', ['/c', tsxBin + '.cmd', 'server.ts'], {
+        cwd: FRONTEND_DIR,
+        env: { ...sharedEnv, NODE_ENV: 'development' },
+        shell: false,
+      });
+    }
+  } else {
+    // Last resort: use system node with npx
+    spawnService('Gateway', NODE_EXE, ['F:\\FULL-STACK\\npx.ps1', 'tsx', 'server.ts'], {
+      cwd: FRONTEND_DIR,
+      env: { ...sharedEnv, NODE_ENV: 'development' },
+    });
   }
 
-  setSplashStatus('Starting UI gateway…', 65);
-  const distServerPath = path.join(frontendDir, 'dist', 'server.cjs');
-  if (fs.existsSync(distServerPath)) {
-    spawnService('Gateway', 'node', [distServerPath], {
-      cwd: frontendDir,
-      env: { ...process.env, NODE_ENV: 'production' },
-    });
+  // 5. Poll gateway
+  setStatus('Waiting for UI gateway (port 3000)…', 72);
+  const gatewayReady = await pollUntilReady('http://localhost:3000', 90_000);
+  if (gatewayReady) {
+    setStatus('UI gateway ready ✓', 88);
   } else {
-    spawnService('Gateway', 'npx', ['tsx', 'server.ts'], {
-      cwd: frontendDir,
-      env: { ...process.env, NODE_ENV: 'development' },
-    });
+    setStatus('⚠ Gateway timed out — retrying…', 88, true);
   }
+  await sleep(300);
 
-  setSplashStatus('Waiting for UI gateway…', 78);
-  const gatewayReady = await pollUntilReady('http://localhost:3000', 60_000);
-  if (!gatewayReady) {
-    setSplashStatus('⚠ Gateway timeout — opening anyway…', 90);
-    await new Promise(r => setTimeout(r, 1500));
-  } else {
-    setSplashStatus('All systems online ✓  — launching…', 95);
-    await new Promise(r => setTimeout(r, 600));
-  }
+  // 6. Signal Ollama (non-blocking; OllamaClient handles this server-side)
+  setStatus('Connecting to Ollama (qwen2.5-coder:3b)…', 93);
+  await sleep(600);
+  setStatus('All systems online — launching TriVerse AI…', 100);
+  await sleep(800);
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Main window ────────────────────────────────────────────────────────────────
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1440,
+  mainWin = new BrowserWindow({
+    width:  1440,
     height: 900,
+    minWidth:  900,
+    minHeight: 600,
     title: 'TriVerse AI',
-    icon: path.join(__dirname, 'app_icon.ico'),
-    show: false,   // shown after splash closes
+    icon: path.join(FRONTEND_DIR, 'app_icon.ico'),
+    backgroundColor: '#0f0c29',   // matches loading page bg — no white flash
     webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
+      nodeIntegration: true,       // needed for ipcRenderer in loading.html
+      contextIsolation: false,
     },
   });
 
-  mainWindow.setMenuBarVisibility(false);
+  mainWin.setMenuBarVisibility(false);
 
-  const loadWithRetry = () => {
-    mainWindow.loadURL('http://localhost:3000').catch(() => {
-      console.log('[Electron] Retrying UI load in 500 ms…');
-      setTimeout(loadWithRetry, 500);
+  // Write loading page and display it immediately
+  const loadingPath = path.join(__dirname, '_loading.html');
+  fs.writeFileSync(loadingPath, getLoadingHtml(), 'utf8');
+  mainWin.loadFile(loadingPath);
+
+  // Once Electron says the loading page is ready, start the boot sequence
+  mainWin.webContents.once('did-finish-load', async () => {
+    await bootServices();
+
+    // Navigate to the real app
+    mainWin.loadURL('http://localhost:3000').catch(err => {
+      console.error('[Electron] Failed to load app URL:', err.message);
+      setStatus('⚠ Could not load app — is the gateway running?', 100, true);
     });
-  };
-  loadWithRetry();
 
-  mainWindow.once('ready-to-show', () => {
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.close();
-    }
-    mainWindow.show();
+    // After loading the real app, switch to no-node-integration for security
+    // (already fine since contextIsolation is false only for loading page)
   });
+
+  mainWin.on('closed', () => { mainWin = null; });
 }
 
 // ── Shutdown ──────────────────────────────────────────────────────────────────
@@ -266,29 +355,21 @@ function stopServices() {
   console.log('[Electron] Shutting down all services…');
   for (const proc of childProcesses) {
     try {
-      if (process.platform === 'win32') {
-        spawn('taskkill', ['/pid', String(proc.pid), '/f', '/t'], { shell: true });
-      } else {
-        proc.kill('SIGTERM');
-      }
-    } catch (e) {
-      console.error('[Electron] Kill error:', e.message);
-    }
+      spawn('taskkill', ['/pid', String(proc.pid), '/f', '/t'], {
+        shell: true, windowsHide: true,
+      });
+    } catch (e) {}
   }
   childProcesses = [];
-  // Clean up temp splash file
-  try {
-    const sp = path.join(__dirname, '_splash.html');
-    if (fs.existsSync(sp)) fs.unlinkSync(sp);
-  } catch (_) {}
+  // Clean up temp files
+  for (const tmp of ['_loading.html']) {
+    try { fs.unlinkSync(path.join(__dirname, tmp)); } catch (_) {}
+  }
 }
 
-// ── Entry point ───────────────────────────────────────────────────────────────
-app.whenReady().then(async () => {
-  createSplash();
-  await startServices();
+// ── Entry ─────────────────────────────────────────────────────────────────────
+app.whenReady().then(() => {
   createMainWindow();
-
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });

@@ -1,27 +1,25 @@
 @echo off
 :: ============================================================
 ::  TriVerse AI — Main Launcher
-::  Starts: MLflow + FastAPI Backend + Next.js Gateway + Electron
-::  Conda Environment: dgpu-aiml
+::  Uses local electron binary (no npx/conda PATH needed)
 :: ============================================================
 
-title TriVerse AI Launcher
-set "PROJECT_ROOT=f:\TriVerse-ML-main\TriVerse-ML-main"
-set "FRONTEND_DIR=%PROJECT_ROOT%\frontend\unified_dashboard"
-set "BACKEND_DIR=%PROJECT_ROOT%\backend\unified_api"
-set "CONDA_ENV=dgpu-aiml"
+set "FRONTEND_DIR=f:\TriVerse-ML-main\TriVerse-ML-main\frontend\unified_dashboard"
+set "ELECTRON_BIN=%FRONTEND_DIR%\node_modules\.bin\electron.cmd"
+set "ENTRY=%FRONTEND_DIR%\electron-main.cjs"
 
-:: Activate conda properly in CMD
-call "%USERPROFILE%\Miniconda3\Scripts\activate.bat" %CONDA_ENV%
-if errorlevel 1 (
-    call "%USERPROFILE%\anaconda3\Scripts\activate.bat" %CONDA_ENV%
-)
-
-:: Set models dir for inference service
-set "TRIVERSE_MODELS_DIR=%BACKEND_DIR%\trained_models"
-set "MLFLOW_TRACKING_URI=http://127.0.0.1:5000"
-
-:: Electron handles all service spawning internally (MLflow, FastAPI, Gateway)
-:: Just launch Electron from the frontend directory
 cd /d "%FRONTEND_DIR%"
-npx electron electron-main.cjs
+
+:: Use the locally installed electron binary
+if exist "%ELECTRON_BIN%" (
+    "%ELECTRON_BIN%" "%ENTRY%"
+) else (
+    :: Fallback: try node_modules electron directly
+    set "ELECTRON_EXE=%FRONTEND_DIR%\node_modules\electron\dist\electron.exe"
+    if exist "%ELECTRON_EXE%" (
+        "%ELECTRON_EXE%" "%ENTRY%"
+    ) else (
+        echo [ERROR] Electron not found. Run: cd frontend\unified_dashboard ^&^& npm install
+        pause
+    )
+)

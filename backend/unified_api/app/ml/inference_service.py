@@ -79,9 +79,69 @@ class ModelManager:
 
 
 class CreditInferenceService:
+    # Engineered feature columns produced after feature engineering
+    ENGINEERED_COLS = [
+        "RevolvingUtilizationOfUnsecuredLines",
+        "age",
+        "NumberOfTime30-59DaysPastDueNotWorse",
+        "DebtRatio",
+        "MonthlyIncome",
+        "NumberOfOpenCreditLinesAndLoans",
+        "NumberOfTimes90DaysLate",
+        "NumberRealEstateLoansOrLines",
+        "NumberOfTime60-89DaysPastDueNotWorse",
+        "NumberOfDependents",
+        "MonthlyIncome_log",
+        "DebtRatio_log",
+        "total_late_payments",
+        "age_bin_26-35",
+        "age_bin_36-50",
+        "age_bin_51-65",
+        "age_bin_65+",
+    ]
+
+    @staticmethod
+    def _engineer_features(features: Dict[str, float]) -> Any:
+        """Apply the same feature engineering as CreditDataLoader._load_give_me_some_credit."""
+        import pandas as _pd
+
+        # Build base DataFrame from raw input
+        base_cols = [
+            "RevolvingUtilizationOfUnsecuredLines", "age",
+            "NumberOfTime30-59DaysPastDueNotWorse", "DebtRatio",
+            "MonthlyIncome", "NumberOfOpenCreditLinesAndLoans",
+            "NumberOfTimes90DaysLate", "NumberRealEstateLoansOrLines",
+            "NumberOfTime60-89DaysPastDueNotWorse", "NumberOfDependents",
+        ]
+        row = {col: features.get(col, 0.0) for col in base_cols}
+        df = _pd.DataFrame([row])
+
+        # 1. Clip utilisation
+        df["RevolvingUtilizationOfUnsecuredLines"] = df["RevolvingUtilizationOfUnsecuredLines"].clip(upper=1.0)
+
+        # 2. Log-transform monetary columns
+        df["MonthlyIncome_log"] = np.log1p(df["MonthlyIncome"].fillna(0))
+        df["DebtRatio_log"] = np.log1p(df["DebtRatio"].clip(upper=10.0))
+
+        # 3. Total late payments
+        df["total_late_payments"] = (
+            df["NumberOfTime30-59DaysPastDueNotWorse"]
+            + df["NumberOfTimes90DaysLate"]
+            + df["NumberOfTime60-89DaysPastDueNotWorse"]
+        )
+
+        # 4. Age bins (same bins as training, drop_first=True → 4 dummies)
+        age = float(df["age"].iloc[0])
+        df["age_bin_26-35"] = 1.0 if 26 <= age <= 35 else 0.0
+        df["age_bin_36-50"] = 1.0 if 36 <= age <= 50 else 0.0
+        df["age_bin_51-65"] = 1.0 if 51 <= age <= 65 else 0.0
+        df["age_bin_65+"]   = 1.0 if age > 65 else 0.0
+
+        return df[CreditInferenceService.ENGINEERED_COLS]
+
     @staticmethod
     def predict(features: Dict[str, float], model_name: str = "random_forest") -> Dict[str, Any]:
-        # Supported Models: logistic_regression, decision_tree, random_forest, catboost, mlp
+        """Run real credit default prediction using a trained model."""
         model_map = {
             "logisticregression": "logistic_regression",
             "decisiontree": "decision_tree",
@@ -100,18 +160,12 @@ class CreditInferenceService:
         except Exception as e:
             raise FileNotFoundError(f"Credit scoring model not loaded: {str(e)}")
 
-        from app.ml.credit.data import GMSC_FEATURE_COLS
-        feat_vals = []
-        for col in GMSC_FEATURE_COLS:
-            feat_vals.append(features.get(col, 0.0))
-
-        X_raw = np.array([feat_vals])
         import pandas as pd
-        df_raw = pd.DataFrame(X_raw, columns=GMSC_FEATURE_COLS)
-        X_processed = preprocessor.transform(df_raw)
+        df_engineered = CreditInferenceService._engineer_features(features)
+        X_processed = preprocessor.transform(df_engineered.values)
 
         if hasattr(model, "predict_proba"):
-            proba = model.predict_proba(X_processed)[0][1]
+            proba = float(model.predict_proba(X_processed)[0][1])
         else:
             pred = model.predict(X_processed)[0]
             proba = 0.99 if pred == 1 else 0.05
@@ -131,7 +185,7 @@ class CreditInferenceService:
             "prediction": prediction,
             "probability": proba,
             "score": score,
-            "risk": risk
+            "risk": risk,
         }
 
 

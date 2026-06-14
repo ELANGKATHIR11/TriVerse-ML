@@ -76,3 +76,7 @@ trained_models/
 *.h5
 *.pth
 *.pkl
+
+# Raw dataset downloads
+**/emnist/raw/
+**/mnist/raw/

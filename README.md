@@ -8,6 +8,8 @@ TriVerse AI is an enterprise-grade, modular monorepo platform designed for local
 ## Architecture Overview
 The platform uses a unified multi-app design linked via shared libraries, a central FastAPI backend, and an interactive Vite-based dashboard. 
 
+![TriVerse AI Architecture](./architecture.png)
+
 ```mermaid
 graph TD
     UI[Vite & Electron Frontend] -->|HTTP/WebSockets| API[FastAPI Unified Backend]
@@ -32,12 +34,13 @@ graph TD
 
 ---
 
-## CodeAlpha Tasks Mapping
-TriVerse AI contains the official CodeAlpha submissions structured in the root directory:
+## CodeAlpha Tasks Mappings & Hierarchy
 
-*   **Task 1: Credit Scoring** $\rightarrow$ [CodeAlpha_Task1_CreditScoring/](./CodeAlpha_Task1_CreditScoring/)
-*   **Task 2: Emotion Recognition (Disease Prediction)** $\rightarrow$ [CodeAlpha_Task2_EmotionRecognition/](./CodeAlpha_Task2_EmotionRecognition/)
-*   **Task 3: Handwritten Character Recognition** $\rightarrow$ [CodeAlpha_Task3_HandwrittenRecognition/](./CodeAlpha_Task3_HandwrittenRecognition/)
+| Task Folder | Source Code | Jupyter EDA | Unit Tests | Requirements |
+| :--- | :--- | :--- | :--- | :--- |
+| **[Task 1: Credit Scoring](./CodeAlpha_Task1_CreditScoring/)** | [src/](./CodeAlpha_Task1_CreditScoring/src/) | [notebooks/](./CodeAlpha_Task1_CreditScoring/notebooks/) | [tests/](./CodeAlpha_Task1_CreditScoring/tests/) | [requirements.txt](./CodeAlpha_Task1_CreditScoring/requirements.txt) |
+| **[Task 2: Emotion Recognition](./CodeAlpha_Task2_EmotionRecognition/)** | [src/](./CodeAlpha_Task2_EmotionRecognition/src/) | [notebooks/](./CodeAlpha_Task2_EmotionRecognition/notebooks/) | [tests/](./CodeAlpha_Task2_EmotionRecognition/tests/) | [requirements.txt](./CodeAlpha_Task2_EmotionRecognition/requirements.txt) |
+| **[Task 3: Handwritten Recognition](./CodeAlpha_Task3_HandwrittenRecognition/)** | [src/](./CodeAlpha_Task3_HandwrittenRecognition/src/) | [notebooks/](./CodeAlpha_Task3_HandwrittenRecognition/notebooks/) | [tests/](./CodeAlpha_Task3_HandwrittenRecognition/tests/) | [requirements.txt](./CodeAlpha_Task3_HandwrittenRecognition/requirements.txt) |
 
 ---
 

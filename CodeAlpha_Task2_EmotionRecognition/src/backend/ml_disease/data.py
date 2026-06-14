@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # Dataset paths
 # ---------------------------------------------------------------------------
 
-HEART_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "disease_prediction_heart.csv"
-DIABETES_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "disease_prediction_diabetes.csv"
-BREAST_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "disease_prediction_breast_cancer.csv"
+HEART_PATH = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "disease_prediction_heart.csv"
+DIABETES_PATH = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "disease_prediction_diabetes.csv"
+BREAST_PATH = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "disease_prediction_breast_cancer.csv"
 
 # ---------------------------------------------------------------------------
 # Column definitions

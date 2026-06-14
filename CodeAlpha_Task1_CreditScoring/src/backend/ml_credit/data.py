@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # Dataset paths
 # ---------------------------------------------------------------------------
 
-DATASET_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "credit_scoring_give_me_some_credit.csv"
-GERMAN_PATH = Path(__file__).resolve().parent.parent.parent / "datasets" / "credit_scoring_german.csv"
+DATASET_PATH = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "credit_scoring_give_me_some_credit.csv"
+GERMAN_PATH = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "credit_scoring_german.csv"
 
 # ---------------------------------------------------------------------------
 # Column definitions

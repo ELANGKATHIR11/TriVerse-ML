@@ -16,8 +16,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-EMNIST_DIR = Path(__file__).resolve().parent.parent.parent / "datasets" / "handwriting" / "emnist"
-MNIST_DIR = Path(__file__).resolve().parent.parent.parent / "datasets" / "handwriting" / "mnist"
+EMNIST_DIR = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "handwriting" / "emnist"
+MNIST_DIR = Path(__file__).resolve().parent.parent.parent.parent / "datasets" / "handwriting" / "mnist"
 
 # EMNIST Balanced class map: digits 0-9 then uppercase A-Z then selected lowercase
 _EMNIST_BALANCED_CLASSES: list[str] = [

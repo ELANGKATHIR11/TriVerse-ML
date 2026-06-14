@@ -1,17 +1,17 @@
 Set WshShell = CreateObject("WScript.Shell")
+Set fso = CreateObject("Scripting.FileSystemObject")
+currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
-' 1. Start Ollama if not running
+exePath = currentDir & "\frontend\unified_dashboard\dist-electron\TriVerse ML-win32-x64\TriVerse ML.exe"
+frontendDir = currentDir & "\frontend\unified_dashboard"
+
+' 1. Try to start local Ollama if not running
 WshShell.Run "cmd /c netstat -ano | findstr :11434 || start /b ollama serve", 0, False
 
-' 2. Start MLflow tracking server
-WshShell.Run "cmd /c conda activate dgpu-aiml && mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri ""sqlite:///F:/TriVerse ML/mlruns/mlflow.db"" --default-artifact-root ""F:/TriVerse ML/mlruns""", 0, False
-
-' 3. Start FastAPI backend
-WshShell.Run "cmd /c cd /d ""F:\TriVerse ML\backend\unified_api"" && conda activate dgpu-aiml && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000", 0, False
-
-' 4. Start Next.js/Vite frontend dev server
-WshShell.Run "cmd /c cd /d ""F:\TriVerse ML\frontend\unified_dashboard"" && npm run dev", 0, False
-
-' 5. Wait 6 seconds for startup, then launch as a standalone desktop app using Electron
-WScript.Sleep 6000
-WshShell.Run "cmd /c cd /d ""F:\TriVerse ML\frontend\unified_dashboard"" && npm run electron", 0, False
+' 2. Launch the native App silently
+If fso.FileExists(exePath) Then
+    WshShell.Run """" & exePath & """", 0, False
+Else
+    ' Fallback to dev-mode launcher if compiled app isn't found
+    WshShell.Run "cmd /c cd /d """ & frontendDir & """ && npm run electron", 0, False
+End If

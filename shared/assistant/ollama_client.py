@@ -14,10 +14,23 @@ class OllamaClient:
                 if res.status_code == 200:
                     models = [m["name"] for m in res.json().get("models", [])]
                     # Check if the configured model is pulled
-                    return any(self.model in m or m in self.model for m in models)
+                    has_model = any(self.model in m or m in self.model for m in models)
+                    if not has_model:
+                        import asyncio
+                        # Trigger background pull
+                        asyncio.create_task(self._pull_model())
+                    return has_model
         except Exception:
             pass
         return False
+
+    async def _pull_model(self):
+        """Asynchronously pull the model from Ollama registry in the background."""
+        try:
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                await client.post(f"{self.base_url}/api/pull", json={"name": self.model})
+        except Exception:
+            pass
 
     async def generate(self, prompt: str, system: str = None) -> str:
         """Run single prompt generation."""

@@ -5,8 +5,8 @@ import { createServer as createViteServer } from "vite";
 import { request as httpRequest } from "http";
 
 // Ensure ESM compatibility for node
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const _filename = typeof __filename !== "undefined" ? __filename : fileURLToPath(import.meta.url);
+const _dirname = typeof __dirname !== "undefined" ? __dirname : path.dirname(_filename);
 
 // Deterministic Helper for Local/Native AI Companion Response
 function generateNativeResponse(message: string): string {
@@ -210,7 +210,7 @@ async function startServer() {
 
   // Serve favicon
   app.get("/favicon.ico", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "favicon.svg"));
+    res.sendFile(path.join(_dirname, "public", "favicon.svg"));
   });
 
   // Simulated metrics and database pipelines for interactive dashboards

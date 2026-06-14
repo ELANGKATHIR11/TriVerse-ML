@@ -74,9 +74,18 @@ function pollUntilReady(url, maxMs = 120_000, intervalMs = 1_200) {
   });
 }
 
+// ── Logging helper ─────────────────────────────────────────────────────────────
+const logFile = path.join(ROOT, 'triverse_boot.log');
+try { fs.writeFileSync(logFile, `=== Boot Log Started at ${new Date().toISOString()} ===\n`, 'utf8'); } catch(e){}
+function logDebug(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  console.log(msg);
+  try { fs.appendFileSync(logFile, line, 'utf8'); } catch(e){}
+}
+
 // ── Send status update to the in-window loading page ─────────────────────────
 function setStatus(text, pct, isError = false) {
-  console.log(`[Boot] (${pct}%) ${text}`);
+  logDebug(`[Boot] (${pct}%) ${text}`);
   if (mainWin && !mainWin.isDestroyed()) {
     mainWin.webContents.send('boot-status', { text, pct, isError });
   }
@@ -84,16 +93,16 @@ function setStatus(text, pct, isError = false) {
 
 // ── Spawn helper ──────────────────────────────────────────────────────────────
 function spawnService(label, exe, args, opts = {}) {
-  console.log(`[${label}] Spawning: ${exe} ${args.join(' ')}`);
+  logDebug(`[${label}] Spawning: ${exe} ${args.join(' ')}`);
   const proc = spawn(exe, args, {
     cwd: opts.cwd || ROOT,
     env: { ...process.env, ...(opts.env || {}) },
     shell: false,          // ← no shell needed; absolute paths
     windowsHide: true,     // ← no console window
   });
-  proc.stdout.on('data', d => console.log(`[${label}] ${d.toString().trim()}`));
-  proc.stderr.on('data', d => console.error(`[${label}] ${d.toString().trim()}`));
-  proc.on('exit', c => console.log(`[${label}] exited with code ${c}`));
+  proc.stdout.on('data', d => logDebug(`[${label}] ${d.toString().trim()}`));
+  proc.stderr.on('data', d => logDebug(`[${label} ERROR] ${d.toString().trim()}`));
+  proc.on('exit', c => logDebug(`[${label}] exited with code ${c}`));
   childProcesses.push(proc);
   return proc;
 }
@@ -181,31 +190,35 @@ function getLoadingHtml() {
 <div class="version">v2.0.0 &nbsp;·&nbsp; dgpu-aiml &nbsp;·&nbsp; RTX 5060</div>
 
 <script>
-const { ipcRenderer } = require('electron');
-const steps = {
-  mlflow:  document.getElementById('s-mlflow'),
-  backend: document.getElementById('s-backend'),
-  gateway: document.getElementById('s-gateway'),
-  ollama:  document.getElementById('s-ollama'),
-};
+try {
+  const { ipcRenderer } = require('electron');
+  const steps = {
+    mlflow:  document.getElementById('s-mlflow'),
+    backend: document.getElementById('s-backend'),
+    gateway: document.getElementById('s-gateway'),
+    ollama:  document.getElementById('s-ollama'),
+  };
 
-ipcRenderer.on('boot-status', (_, msg) => {
-  const el = document.getElementById('status');
-  el.textContent = msg.text;
-  el.className = 'status-label' + (msg.isError ? ' error' : '');
-  document.getElementById('bar').style.width = msg.pct + '%';
-  document.getElementById('pct').textContent = msg.pct + '%';
+  ipcRenderer.on('boot-status', (_, msg) => {
+    const el = document.getElementById('status');
+    el.textContent = msg.text;
+    el.className = 'status-label' + (msg.isError ? ' error' : '');
+    document.getElementById('bar').style.width = msg.pct + '%';
+    document.getElementById('pct').textContent = msg.pct + '%';
 
-  // Activate steps based on pct thresholds
-  if (msg.pct >= 10)  activateStep('mlflow');
-  if (msg.pct >= 25)  doneStep('mlflow'),  activateStep('backend');
-  if (msg.pct >= 60)  doneStep('backend'), activateStep('gateway');
-  if (msg.pct >= 85)  doneStep('gateway'), activateStep('ollama');
-  if (msg.pct >= 98)  doneStep('ollama');
-});
+    // Activate steps based on pct thresholds
+    if (msg.pct >= 10)  activateStep('mlflow');
+    if (msg.pct >= 25)  doneStep('mlflow'),  activateStep('backend');
+    if (msg.pct >= 60)  doneStep('backend'), activateStep('gateway');
+    if (msg.pct >= 85)  doneStep('gateway'), activateStep('ollama');
+    if (msg.pct >= 98)  doneStep('ollama');
+  });
 
-function activateStep(k){ if(steps[k]) steps[k].className='step active'; }
-function doneStep(k){     if(steps[k]) steps[k].className='step done'; }
+  function activateStep(k){ if(steps[k]) steps[k].className='step active'; }
+  function doneStep(k){     if(steps[k]) steps[k].className='step done'; }
+} catch (e) {
+  console.error("Renderer script error:", e);
+}
 </script>
 </body>
 </html>`;
@@ -213,6 +226,7 @@ function doneStep(k){     if(steps[k]) steps[k].className='step done'; }
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
 async function bootServices() {
+  logDebug('Entering bootServices');
   fs.mkdirSync(MLRUNS_DIR, { recursive: true });
   fs.mkdirSync(MODELS_DIR,  { recursive: true });
 
@@ -234,7 +248,7 @@ async function bootServices() {
       '--default-artifact-root', MLRUNS_DIR,
     ], { cwd: ROOT, env: sharedEnv });
   } else {
-    console.warn('[Boot] mlflow.exe not found — skipping MLflow');
+    logDebug('[Boot] mlflow.exe not found — skipping MLflow');
   }
   await sleep(1200);
 
@@ -312,6 +326,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── Main window ────────────────────────────────────────────────────────────────
 function createMainWindow() {
+  logDebug('createMainWindow called');
   mainWin = new BrowserWindow({
     width:  1440,
     height: 900,
@@ -327,6 +342,7 @@ function createMainWindow() {
   });
 
   mainWin.setMenuBarVisibility(false);
+  mainWin.webContents.openDevTools(); // Open DevTools to see console/rendering errors
 
   // Write loading page and display it immediately
   const loadingPath = path.join(__dirname, '_loading.html');
@@ -335,19 +351,23 @@ function createMainWindow() {
 
   // Once Electron says the loading page is ready, start the boot sequence
   mainWin.webContents.once('did-finish-load', async () => {
-    await bootServices();
-
-    // Navigate to the real app
-    mainWin.loadURL('http://localhost:3000').catch(err => {
-      console.error('[Electron] Failed to load app URL:', err.message);
-      setStatus('⚠ Could not load app — is the gateway running?', 100, true);
-    });
-
-    // After loading the real app, switch to no-node-integration for security
-    // (already fine since contextIsolation is false only for loading page)
+    logDebug('did-finish-load event received');
+    try {
+      await bootServices();
+      logDebug('bootServices completed, loading localhost:3000');
+      mainWin.loadURL('http://localhost:3000').catch(err => {
+        logDebug(`[Electron ERROR] Failed to load app URL: ${err.message}`);
+        setStatus('⚠ Could not load app — is the gateway running?', 100, true);
+      });
+    } catch (e) {
+      logDebug(`[Boot Exception] ${e.stack}`);
+    }
   });
 
-  mainWin.on('closed', () => { mainWin = null; });
+  mainWin.on('closed', () => {
+    logDebug('mainWin closed');
+    mainWin = null;
+  });
 }
 
 // ── Shutdown ──────────────────────────────────────────────────────────────────

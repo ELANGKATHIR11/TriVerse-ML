@@ -80,3 +80,8 @@ trained_models/
 # Raw dataset downloads
 **/emnist/raw/
 **/mnist/raw/
+
+# Log files & Temp loading files
+triverse_boot.log
+_loading.html
+**/_loading.html

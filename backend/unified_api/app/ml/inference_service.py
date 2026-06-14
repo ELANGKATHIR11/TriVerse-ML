@@ -14,9 +14,16 @@ from PIL import Image
 # Import handlers/models to reuse structural code
 from app.ml.handwriting.resnet_model import DEVICE as TORCH_DEVICE
 
-# Set up paths relative to project root
-BASE_DIR = Path(__file__).resolve().parents[2] # backend/unified_api
+# Resolve TRAINED_MODELS_DIR absolutely from this file's location.
+# Path: app/ml/inference_service.py → resolve parents[2] = backend/unified_api
+BASE_DIR = Path(__file__).resolve().parents[2]  # backend/unified_api
 TRAINED_MODELS_DIR = BASE_DIR / "trained_models"
+
+# Safety: also try reading env override (set by Electron launcher)
+import os as _os
+_env_override = _os.environ.get("TRIVERSE_MODELS_DIR")
+if _env_override and Path(_env_override).is_dir():
+    TRAINED_MODELS_DIR = Path(_env_override)
 
 class ModelManager:
     """Manages loading, caching, and running ML models for inference."""

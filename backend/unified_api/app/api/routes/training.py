@@ -49,6 +49,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/training", tags=["Training"])
 
+# Absolute path to trained_models directory (resolved from this file's location)
+# training.py lives at app/api/routes/ → parents[3] = backend/unified_api
+_BACKEND_DIR = Path(__file__).resolve().parents[3]
+TRAINED_MODELS_DIR = _BACKEND_DIR / "trained_models"
+
 # In-memory store: session_id -> {"status", "stop_event", "messages"}
 _active_sessions: dict[str, dict[str, Any]] = {}
 
@@ -164,14 +169,16 @@ async def _run_training(
                 from app.ml.credit.data import CreditDataLoader
                 loader = CreditDataLoader()
                 X_train, X_test, y_train, y_test, feat_names, preprocessor = loader.load("primary")
-                os.makedirs("trained_models/credit", exist_ok=True)
-                joblib.dump(preprocessor, "trained_models/credit/preprocessor.joblib")
+                _credit_dir = TRAINED_MODELS_DIR / "credit"
+                _credit_dir.mkdir(parents=True, exist_ok=True)
+                joblib.dump(preprocessor, str(_credit_dir / "preprocessor.joblib"))
             elif task_type == "disease":
                 from app.ml.disease.data import DiseaseDataLoader
                 loader = DiseaseDataLoader()
                 X_train, X_test, y_train, y_test, feat_names, preprocessor = loader.load("heart")
-                os.makedirs("trained_models/disease", exist_ok=True)
-                joblib.dump(preprocessor, "trained_models/disease/preprocessor.joblib")
+                _disease_dir = TRAINED_MODELS_DIR / "disease"
+                _disease_dir.mkdir(parents=True, exist_ok=True)
+                joblib.dump(preprocessor, str(_disease_dir / "preprocessor.joblib"))
             elif task_type == "handwriting":
                 from app.ml.handwriting.data import HandwritingDataLoader
                 loader = HandwritingDataLoader()

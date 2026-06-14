@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 # ── Model files expected on disk ────────────────────────────────────────────
 
-_BASE_DIR = Path(__file__).resolve().parents[3]  # backend/unified_api
+_BASE_DIR = Path(__file__).resolve().parents[2]  # app/core -> app -> unified_api
 _TRAINED = _BASE_DIR / "trained_models"
+
 
 EXPECTED_MODELS: dict[str, list[str]] = {
     "credit": [

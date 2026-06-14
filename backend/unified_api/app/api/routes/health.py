@@ -49,7 +49,8 @@ async def list_model_files() -> dict[str, Any]:
     Useful for the frontend Model Registry view.
     """
     result = _check_model_files()
-    base_dir = Path(__file__).resolve().parents[4] / "trained_models"
+    base_dir = Path(__file__).resolve().parents[3] / "trained_models"  # routes->api->app->unified_api
+
 
     file_details: list[dict[str, Any]] = []
     for task_type in ("credit", "disease", "vision"):

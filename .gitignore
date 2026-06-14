@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js / Vite build output
+.next/
+out/
+build/
+dist/
+dist-electron/
+frontend/unified_dashboard/dist-electron/
+
+# PyTorch / Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.pytest_cache/
+.virtualenvs/
+venv/
+env/
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Heavy archives & zip files
+*.zip
+*.7z
+*.rar
+*.gz
+
+# Executables
+*.exe
+*.dll
+*.so
+
+# CatBoost Info
+catboost_info/
+
+# Local database file locks / temp files
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Databases & Vector Stores
+*.db
+chroma_db/
+
+# MLflow Tracking & Optuna DBs
+mlruns/
+mlflow.db
+optuna.db
+
+# Model weights and binaries
+trained_models/
+*.h5
+*.pth
+*.pkl

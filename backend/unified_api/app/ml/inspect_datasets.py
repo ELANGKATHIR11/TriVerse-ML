@@ -1,0 +1,10 @@
+import pandas as pd
+df1=pd.read_csv('F:/TriVerse ML/datasets/disease_prediction_heart.csv')
+print('HEART shape:', df1.shape, 'cols:', list(df1.columns))
+print('HEART head:')
+print(df1.head(3).to_string())
+print()
+df3=pd.read_csv('F:/TriVerse ML/datasets/disease_prediction_breast_cancer.csv')
+print('BREAST shape:', df3.shape, 'cols:', list(df3.columns))
+print('BREAST head:')
+print(df3.head(2).to_string())

@@ -1,4 +1,15 @@
 # repo_checkin.ps1
+# Ensure standard Windows system directories are in the PATH
+$SysPaths = @(
+    "C:\Windows\System32",
+    "C:\Windows",
+    "C:\Windows\System32\Wbem",
+    "C:\Windows\System32\WindowsPowerShell\v1.0",
+    "C:\Program Files\nodejs",
+    $env:PATH
+)
+$env:PATH = ($SysPaths | Select-Object -Unique) -join [IO.Path]::PathSeparator
+
 $LogFile = Join-Path -Path $PSScriptRoot -ChildPath "repo_checkin.log"
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 

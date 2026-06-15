@@ -25,10 +25,12 @@ logger = logging.getLogger(__name__)
 # Database URL
 # ---------------------------------------------------------------------------
 
+import os
+
 # Resolve the project root so the DB file lands alongside the backend package
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]  # backend/
 _DB_FILE = _PROJECT_ROOT / "codealpha.db"
-DATABASE_URL = f"sqlite+aiosqlite:///{_DB_FILE}"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{_DB_FILE.as_posix()}")
 
 # ---------------------------------------------------------------------------
 # Engine

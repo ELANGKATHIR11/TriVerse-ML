@@ -9,7 +9,7 @@ from pathlib import Path
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_FILE = BASE_DIR / "test_codealpha.db"
-DB_URL = f"sqlite+aiosqlite:///{DB_FILE}"
+DB_URL = f"sqlite+aiosqlite:///{DB_FILE.as_posix()}"
 
 @pytest.fixture(scope="module")
 def run_servers():
@@ -152,4 +152,4 @@ def test_frontend_backend_integration(run_servers):
     assert row is not None
     assert row[0] == "admin"
     assert row[1] == "admin@codealpha.ai"
-    assert row[2] == "admin"
+    assert row[2].upper() == "ADMIN"

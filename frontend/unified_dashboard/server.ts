@@ -130,7 +130,7 @@ async function startServer() {
     
     const proxyReq = httpRequest(
       {
-        host: "localhost",
+        host: "127.0.0.1",
         port: 8000,
         path: "/assistant/chat",
         method: "POST",
@@ -167,7 +167,7 @@ async function startServer() {
       return next();
     }
     
-    const targetUrl = "http://localhost:8000";
+    const targetUrl = "http://127.0.0.1:8000";
     const path = req.originalUrl.replace(/^\/api/, "");
     
     const headers: Record<string, string> = {};
@@ -264,7 +264,7 @@ async function startServer() {
       
       const proxyReq = httpRequest({
         port: 8000,
-        host: "localhost",
+        host: "127.0.0.1",
         path: path,
         method: "GET",
         headers: {

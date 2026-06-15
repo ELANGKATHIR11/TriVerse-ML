@@ -120,3 +120,27 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+/* Color overrides to make all texts high contrast and compliant with user preference */
+/* Primary text: white */
+.text-zinc-500, .text-zinc-450, .text-zinc-550, .text-zinc-350,
+.text-slate-400, .text-slate-350, .text-slate-450, .text-slate-500,
+.text-zinc-600, .text-zinc-300, .text-slate-300, .text-zinc-400,
+label, p, span.text-zinc-500, span.text-slate-400 {
+  color: #ffffff !important;
+}
+
+/* Red accents and status text */
+.text-rose-455, .text-rose-450, .text-rose-500, .text-red-400, .text-red-500, .text-rose-400, .text-rose-350 {
+  color: #ef4444 !important; /* light red */
+}
+
+/* Yellow accents and status text */
+.text-amber-400, .text-yellow-400, .text-yellow-500, .text-amber-500 {
+  color: #eab308 !important; /* bright yellow */
+}
+
+/* Green accents and status text */
+.text-teal-400, .text-green-400, .text-green-500, .text-teal-455, .text-emerald-400, .text-cyan-400 {
+  color: #2dd4bf !important; /* teal/green */
+}

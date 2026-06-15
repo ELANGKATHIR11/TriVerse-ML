@@ -57,6 +57,10 @@ export default function LoginTab() {
           </div>
         )}
 
+        <div className="text-[10px] text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 p-2.5 rounded-lg leading-relaxed">
+          <strong>Important:</strong> If the password gets rejected, please <strong>manually type</strong> <code>admin123</code>. Browsers like Edge and Brave often auto-fill incorrect saved credentials.
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block font-mono text-[9px] text-slate-500 font-bold mb-1 uppercase">Username</label>

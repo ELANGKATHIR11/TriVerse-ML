@@ -255,8 +255,18 @@ export const useAppStore = create<AppState>((set) => ({
 
     const headers = { "Authorization": `Bearer ${token}` };
 
+    const handleAuthError = (status: number) => {
+      if (status === 401) {
+        localStorage.removeItem("token");
+        set({ isAuthenticated: false });
+        return true;
+      }
+      return false;
+    };
+
     try {
       const modelsRes = await fetch("/api/models", { headers });
+      if (handleAuthError(modelsRes.status)) return;
       if (modelsRes.ok) {
         const modelsData = await modelsRes.json();
         const mappedModels: ModelMetadata[] = modelsData.map((m: any) => {
@@ -296,6 +306,7 @@ export const useAppStore = create<AppState>((set) => ({
 
     try {
       const sessionsRes = await fetch("/api/training/sessions", { headers });
+      if (handleAuthError(sessionsRes.status)) return;
       if (sessionsRes.ok) {
         const sessionsData = await sessionsRes.json();
         const mappedExperiments: Experiment[] = (sessionsData.sessions || []).map((s: any) => ({
@@ -317,6 +328,7 @@ export const useAppStore = create<AppState>((set) => ({
 
     try {
       const logsRes = await fetch("/api/security/audit-logs", { headers });
+      if (handleAuthError(logsRes.status)) return;
       if (logsRes.ok) {
         const logsData = await logsRes.json();
         const mappedLogs: SecurityLog[] = logsData.map((l: any) => ({

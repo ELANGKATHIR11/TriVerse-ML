@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAppStore } from "../state/store";
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, 
@@ -111,8 +111,8 @@ export default function DiseasePredictionTab() {
     reader.readAsText(file);
   };
 
-  const handleDiagnose = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDiagnose = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       const token = localStorage.getItem("token");
       const modelParam = selectedPredictModel ? `?model_name=${selectedPredictModel}` : "";
@@ -151,6 +151,10 @@ export default function DiseasePredictionTab() {
       console.error("Diagnosis error:", err);
     }
   };
+
+  useEffect(() => {
+    handleDiagnose();
+  }, [age, gender, cholesterol, systolicBp, heartRate, smoker, familyHistory, bloodSugar, selectedPredictModel]);
 
   // Dynamic AP metric calculation
   const calculateApMetric = () => {

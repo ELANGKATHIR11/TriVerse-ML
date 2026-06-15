@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAppStore } from "../state/store";
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, 
@@ -158,8 +158,8 @@ export default function CreditScoringTab() {
   };
 
   // Predict action
-  const handlePredict = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePredict = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     try {
       const token = localStorage.getItem("token");
       const modelParam = selectedPredictModel ? `?model_name=${selectedPredictModel}` : "";
@@ -208,6 +208,10 @@ export default function CreditScoringTab() {
       console.error("Prediction error:", err);
     }
   };
+
+  useEffect(() => {
+    handlePredict();
+  }, [age, income, debtRatio, currUtilization, delinquencies, selectedPredictModel]);
 
   // CSV file upload handler for batch prediction
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

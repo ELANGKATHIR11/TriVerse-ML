@@ -28,6 +28,7 @@ export default function OverviewTab() {
   const totalExps = experiments.length;
   const totalModels = models.length;
   const completedExps = experiments.filter(e => e.status === "Completed").length;
+  const latestExp = totalExps > 0 ? experiments[totalExps - 1] : null;
 
   const creditModels = models.filter(m => m.task === "Credit Scoring");
   const diseaseModels = models.filter(m => m.task === "Disease Prediction");

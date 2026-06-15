@@ -49,6 +49,7 @@ class DiseaseOptunaOptimizer:
         "xgboost": "_objective_xgboost",
         "catboost": "_objective_catboost",
         "mlp": "_objective_mlp",
+        "ft_transformer": "_objective_ft_transformer",
     }
 
     def __init__(
@@ -323,3 +324,32 @@ class DiseaseOptunaOptimizer:
             cv=self._cv, scoring="roc_auc", n_jobs=1,
         )
         return float(1.0 - scores.mean())
+
+    def _objective_ft_transformer(self, trial: optuna.Trial) -> float:
+        token_dim = trial.suggest_categorical("token_dim", [16, 32, 64])
+        n_heads = trial.suggest_categorical("n_heads", [2, 4])
+        depth = trial.suggest_int("depth", 1, 3)
+        dropout = trial.suggest_float("dropout", 0.0, 0.3)
+        lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+        epochs = trial.suggest_int("epochs", 5, 20)
+
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            self.X_train, self.y_train,
+            test_size=0.2, random_state=42, stratify=self.y_train,
+        )
+
+        from app.ml.disease.disease_fttransformer_trainer import FTTransformerClassifier
+        model = FTTransformerClassifier(
+            num_features=self.X_train.shape[1],
+            token_dim=token_dim,
+            n_heads=n_heads,
+            depth=depth,
+            dropout=dropout,
+            lr=lr,
+            epochs=epochs,
+            batch_size=64
+        )
+        model.fit(X_tr, y_tr)
+        y_proba = model.predict_proba(X_val)[:, 1]
+        auc = roc_auc_score(y_val, y_proba)
+        return float(1.0 - auc)

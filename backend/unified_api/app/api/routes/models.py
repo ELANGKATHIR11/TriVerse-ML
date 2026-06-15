@@ -12,6 +12,36 @@ from app.models.inference import PredictionLog
 
 router = APIRouter(prefix="/models", tags=["models"])
 
+from app.models.experiment import ExperimentMetrics
+
+async def get_model_metrics(db: AsyncSession, registry: ModelRegistry) -> Dict[str, Any]:
+    if not registry.experiment_id:
+        return {}
+    # Find matching model_name in ExperimentMetrics
+    stmt = select(ExperimentMetrics).where(ExperimentMetrics.experiment_id == registry.experiment_id)
+    metrics_list = (await db.execute(stmt)).scalars().all()
+    
+    # Try to match by name
+    reg_name_lower = registry.name.lower()
+    for m in metrics_list:
+        m_name_lower = m.model_name.lower()
+        if (m_name_lower in reg_name_lower) or \
+           (m_name_lower == "efficientnet" and "efficientnet" in reg_name_lower) or \
+           (m_name_lower == "resnet18" and "resnet" in reg_name_lower):
+            return {
+                "accuracy": m.accuracy,
+                "precision": m.precision_score,
+                "recall": m.recall_score,
+                "f1_score": m.f1_score,
+                "f1": m.f1_score,
+                "roc_auc": m.roc_auc,
+                "inference_time_ms": m.inference_time_ms,
+                "training_time_sec": m.training_time_sec,
+                "memory_usage_mb": m.memory_usage_mb,
+                "model_size_mb": m.model_size_mb,
+            }
+    return {}
+
 @router.get("", response_model=List[Dict[str, Any]])
 async def list_registered_models(
     db: AsyncSession = Depends(get_db),
@@ -26,6 +56,28 @@ async def list_registered_models(
         # Fetch versions
         version_stmt = select(ModelVersion).where(ModelVersion.registry_id == r.id).order_by(ModelVersion.created_at.desc())
         versions = (await db.execute(version_stmt)).scalars().all()
+        
+        version_list = []
+        for v in versions:
+            v_metrics = v.metrics_json or await get_model_metrics(db, r)
+            version_list.append({
+                "version": v.version,
+                "is_active": v.is_active,
+                "metrics": v_metrics,
+                "params": v.params_json or {},
+                "created_at": v.created_at.isoformat()
+            })
+            
+        if not version_list:
+            v_metrics = await get_model_metrics(db, r)
+            version_list.append({
+                "version": "v1",
+                "is_active": True,
+                "metrics": v_metrics,
+                "params": {},
+                "created_at": r.created_at.isoformat()
+            })
+            
         models.append({
             "id": r.id,
             "name": r.name,
@@ -36,11 +88,7 @@ async def list_registered_models(
             "mlflow_run_id": r.mlflow_run_id,
             "created_at": r.created_at.isoformat(),
             "updated_at": r.updated_at.isoformat(),
-            "versions": [{
-                "version": v.version,
-                "is_active": v.is_active,
-                "created_at": v.created_at.isoformat()
-            } for v in versions]
+            "versions": version_list
         })
     return models
 
@@ -59,6 +107,27 @@ async def get_model(
     version_stmt = select(ModelVersion).where(ModelVersion.registry_id == model.id).order_by(ModelVersion.created_at.desc())
     versions = (await db.execute(version_stmt)).scalars().all()
     
+    version_list = []
+    for v in versions:
+        v_metrics = v.metrics_json or await get_model_metrics(db, model)
+        version_list.append({
+            "version": v.version,
+            "is_active": v.is_active,
+            "metrics": v_metrics,
+            "params": v.params_json or {},
+            "created_at": v.created_at.isoformat()
+        })
+        
+    if not version_list:
+        v_metrics = await get_model_metrics(db, model)
+        version_list.append({
+            "version": "v1",
+            "is_active": True,
+            "metrics": v_metrics,
+            "params": {},
+            "created_at": model.created_at.isoformat()
+        })
+        
     return {
         "id": model.id,
         "name": model.name,
@@ -69,13 +138,7 @@ async def get_model(
         "mlflow_run_id": model.mlflow_run_id,
         "created_at": model.created_at.isoformat(),
         "updated_at": model.updated_at.isoformat(),
-        "versions": [{
-            "version": v.version,
-            "is_active": v.is_active,
-            "metrics": v.metrics_json,
-            "params": v.params_json,
-            "created_at": v.created_at.isoformat()
-        } for v in versions]
+        "versions": version_list
     }
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)

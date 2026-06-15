@@ -52,12 +52,16 @@ class HandwritingDataLoader:
 
             MNIST_DIR.mkdir(parents=True, exist_ok=True)
             (x_train, y_train), (x_test, y_test) = mnist.load_data()
+            x_train, x_test = self._normalise_keras(x_train), self._normalise_keras(x_test)
+            y_train, y_test = y_train.astype(np.int64), y_test.astype(np.int64)
         except Exception as exc:
-            logger.error("Failed to load MNIST via Keras: %s", exc)
-            raise RuntimeError(f"MNIST load failed: {exc}") from exc
+            logger.warning("Failed to load MNIST via Keras: %s. Trying torchvision...", exc)
+            try:
+                x_train, x_test, y_train, y_test = self._load_mnist_torchvision()
+            except Exception as tv_exc:
+                logger.error("Failed to load MNIST via torchvision: %s", tv_exc)
+                raise RuntimeError(f"MNIST load failed: {tv_exc}") from tv_exc
 
-        x_train, x_test = self._normalise_keras(x_train), self._normalise_keras(x_test)
-        y_train, y_test = y_train.astype(np.int64), y_test.astype(np.int64)
         class_names = [str(i) for i in range(10)]
 
         logger.info(
@@ -67,6 +71,39 @@ class HandwritingDataLoader:
             len(class_names),
         )
         return x_train, x_test, y_train, y_test, class_names
+
+    def _load_mnist_torchvision(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Load MNIST using torchvision."""
+        import torchvision  # type: ignore[import]
+        import torchvision.transforms as transforms  # type: ignore[import]
+
+        MNIST_DIR.mkdir(parents=True, exist_ok=True)
+        root = str(MNIST_DIR.parent)
+
+        transform = transforms.Compose([transforms.ToTensor()])
+
+        train_ds = torchvision.datasets.MNIST(
+            root=root,
+            train=True,
+            download=True,
+            transform=transform,
+        )
+        test_ds = torchvision.datasets.MNIST(
+            root=root,
+            train=False,
+            download=True,
+            transform=transform,
+        )
+
+        x_train, y_train = self._torchvision_ds_to_numpy(train_ds)
+        x_test, y_test = self._torchvision_ds_to_numpy(test_ds)
+
+        # Transpose NCHW -> NHWC (N, 1, 28, 28) -> (N, 28, 28, 1)
+        x_train = np.transpose(x_train, (0, 2, 3, 1))
+        x_test = np.transpose(x_test, (0, 2, 3, 1))
+
+        return x_train, x_test, y_train, y_test
+
 
     def load_emnist(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
         """Load EMNIST Balanced dataset (47 classes).

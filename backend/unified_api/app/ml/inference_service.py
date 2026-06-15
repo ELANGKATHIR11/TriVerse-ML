@@ -57,6 +57,16 @@ class ModelManager:
                 model.eval()
                 cls._models[cache_key] = model
                 return model
+            elif model_name in ("efficientnet", "efficientnet-b0", "efficientnetb0"):
+                model_path = TRAINED_MODELS_DIR / "vision" / "efficientnet.pth"
+                if not model_path.exists():
+                    raise FileNotFoundError(f"EfficientNet weights not found at {model_path}")
+                from app.ml.handwriting.vision_efficientnet_trainer import EfficientNetB0
+                model = EfficientNetB0(num_classes=10)
+                model.load_state_dict(torch.load(str(model_path), map_location=TORCH_DEVICE))
+                model.eval()
+                cls._models[cache_key] = model
+                return model
 
         # Default joblib loading
         if not model_path.exists():
@@ -148,6 +158,7 @@ class CreditInferenceService:
             "randomforest": "random_forest",
             "catboost": "catboost",
             "mlp": "mlp",
+            "tabnet": "tabnet",
             "logistic regression": "logistic_regression",
             "decision tree": "decision_tree",
             "random forest": "random_forest",
@@ -200,6 +211,9 @@ class DiseaseInferenceService:
             "xgboost": "xgboost",
             "catboost": "catboost",
             "mlp": "mlp",
+            "fttransformer": "ft_transformer",
+            "ft_transformer": "ft_transformer",
+            "ft-transformer": "ft_transformer",
             "logistic regression": "logistic_regression",
             "random forest": "random_forest",
         }
@@ -284,6 +298,12 @@ class HandwritingInferenceService:
         if norm_model_name == "cnn":
             X = np.expand_dims(img_array, axis=(0, -1))
             probs = model.predict(X, verbose=0)[0]
+        elif norm_model_name in ("efficientnet", "efficientnet-b0", "efficientnetb0"):
+            X = np.expand_dims(img_array, axis=(0, 0)) # shape (1, 1, 28, 28)
+            tensor = torch.tensor(X, dtype=torch.float32).to(TORCH_DEVICE)
+            with torch.no_grad():
+                logits = model(tensor)
+                probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
         else:
             X = np.expand_dims(img_array, axis=(0, -1))
             from app.ml.handwriting.resnet_model import ResNet18Trainer
@@ -303,9 +323,17 @@ class HandwritingInferenceService:
                 "probability": float(probs_list[idx])
             })
             
+        gradcam_b64 = ""
+        try:
+            from app.ml.handwriting.gradcam import generate_gradcam_heatmap
+            gradcam_b64, _ = generate_gradcam_heatmap(model, img_array, norm_model_name, predicted_class_idx)
+        except Exception as gc_err:
+            logger.warning("Grad-CAM generation failed: %s", gc_err)
+
         return {
             "prediction": str(predicted_class_idx),
             "probability": float(probs_list[predicted_class_idx]),
             "top_predictions": top_predictions,
-            "probabilities": probs_list
+            "probabilities": probs_list,
+            "gradcam_b64": gradcam_b64
         }

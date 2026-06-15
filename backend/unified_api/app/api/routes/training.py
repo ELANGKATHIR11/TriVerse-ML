@@ -60,23 +60,26 @@ _active_sessions: dict[str, dict[str, Any]] = {}
 # Task type -> model names
 TASK_MODELS: dict[str, list[str]] = {
     "credit": [
-        "RandomForest",
-        "GradientBoosting",
-        "XGBoost",
         "LogisticRegression",
-        "SVM",
+        "DecisionTree",
+        "RandomForest",
+        "CatBoost",
+        "MLP",
+        "TabNet",
     ],
     "disease": [
-        "RandomForest",
-        "GradientBoosting",
-        "XGBoost",
         "LogisticRegression",
         "SVM",
-        "NaiveBayes",
+        "RandomForest",
+        "XGBoost",
+        "CatBoost",
+        "MLP",
+        "FT-Transformer",
     ],
     "handwriting": [
         "CNN",
         "ResNet18",
+        "EfficientNet-B0",
     ],
 }
 
@@ -402,10 +405,9 @@ async def _run_training(
                                     "val_acc": round(val_ac, 4),
                                     "timestamp": datetime.now(UTC).isoformat(),
                                 })
-                        
-                        trainer = CNNTrainer(X_train, X_test, y_train, y_test, num_classes=10, ws_callback=ws_cb)
+                                               trainer = CNNTrainer(X_train, X_test, y_train, y_test, num_classes=10, ws_callback=ws_cb)
                         metrics = await trainer.train(epochs=epochs, batch_size=batch_size)
-                    else:
+                    elif model_name.lower() in ("resnet18", "resnet"):
                         from app.ml.handwriting.resnet_model import ResNet18Trainer
                         async def ws_cb(payload):
                             if payload.get("event") == "epoch_end":
@@ -442,12 +444,17 @@ async def _run_training(
                                     "train_loss": round(tr_loss, 4),
                                     "val_loss": round(val_loss, 4),
                                     "train_acc": round(tr_ac, 4),
-                                    "val_acc": round(val_ac, 4),
+                                    "val_acc": round(val_acc, 4),
                                     "timestamp": datetime.now(UTC).isoformat(),
                                 })
                         
                         trainer = ResNet18Trainer(X_train, X_test, y_train, y_test, num_classes=10, ws_callback=ws_cb)
                         metrics = await trainer.train(epochs=epochs, batch_size=batch_size)
+                    else:
+                        from app.ml.handwriting.vision_efficientnet_trainer import EfficientNetB0Trainer
+                        metrics = await asyncio.to_thread(
+                            lambda: EfficientNetB0Trainer(X_train, X_test, y_train, y_test, num_classes=10).train(epochs=epochs, batch_size=batch_size)
+                        )
 
                     accuracy = metrics["accuracy"]
                     f1 = metrics["f1"]

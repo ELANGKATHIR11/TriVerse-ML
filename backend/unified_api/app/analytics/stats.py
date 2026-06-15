@@ -89,19 +89,35 @@ class AnalyticsEngine:
         leaderboard = []
         for rank, (metric, exp) in enumerate(results, 1):
             acc = metric.accuracy or 0.0
+            prec = metric.precision_score or 0.0
+            rec = metric.recall_score or 0.0
             inf_time = metric.inference_time_ms or 10.0
+            tr_time = metric.training_time_sec or 10.0
+            
+            # Normalize speeds to [0, 1] range
+            inf_score = 1.0 - (min(inf_time, 100.0) / 100.0)
+            tr_score = 1.0 - (min(tr_time, 3600.0) / 3600.0)
+            
+            weighted_score = (acc * 0.4) + (prec * 0.2) + (rec * 0.2) + (inf_score * 0.1) + (tr_score * 0.1)
+            
             leaderboard.append({
                 "rank": rank,
                 "model_name": metric.model_name,
                 "task_type": exp.task_type,
                 "accuracy": acc,
-                "precision": metric.precision_score or 0.0,
-                "recall": metric.recall_score or 0.0,
+                "precision": prec,
+                "recall": rec,
                 "f1_score": metric.f1_score or 0.0,
                 "inference_time_ms": inf_time,
-                "training_time_sec": metric.training_time_sec or 0.0,
-                "weighted_score": float(acc * 0.7 + (1.0 - (min(inf_time, 50.0) / 50.0)) * 0.3)
+                "training_time_sec": tr_time,
+                "weighted_score": float(weighted_score)
             })
+            
+        # Re-sort leaderboard based on weighted_score
+        leaderboard = sorted(leaderboard, key=lambda x: x["weighted_score"], reverse=True)
+        for idx, entry in enumerate(leaderboard, 1):
+            entry["rank"] = idx
+            
         return leaderboard
 
     async def get_model_comparison(self, db: AsyncSession, model_list: List[str]) -> Dict[str, Any]:

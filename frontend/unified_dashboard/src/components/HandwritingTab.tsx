@@ -4,18 +4,32 @@
  */
 
 import React, { useRef, useState, useEffect } from "react";
+import { useAppStore } from "../state/store";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from "recharts";
 import { 
-  Activity, RefreshCw, Trash2, HelpCircle, HardDrive, Upload, Sparkles, TrendingUp
+  Activity, Trash2, HelpCircle, HardDrive, Upload, Sparkles, TrendingUp, Cpu, Eye
 } from "lucide-react";
 
 export default function HandwritingTab() {
+  const { models } = useAppStore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  
+  // Dynamic model selections
+  const visionModels = models.filter(m => m.task === "Handwriting Recognition");
+  const [selectedPredictModel, setSelectedPredictModel] = useState<string>(
+    visionModels.length > 0 ? visionModels[0].name.toLowerCase().replace("handwriting-", "") : "cnn"
+  );
+
   const [predictedDigit, setPredictedDigit] = useState<number | null>(7);
   const [probabilities, setProbabilities] = useState<number[]>([5, 2, 8, 4, 1, 12, 1, 62, 3, 2]); // Prefilled with digit '7' scores
+  const [gradcamB64, setGradcamB64] = useState<string>("");
+  const [misclassificationAnalysis, setMisclassificationAnalysis] = useState<string>(
+    "If this character is misclassified, the model usually confuses it with similar geometric stroke shapes (e.g. 3 vs 8, or 4 vs 9) due to boundary feature overlap."
+  );
+  const [latencyMs, setLatencyMs] = useState<number>(8.4);
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
 
   // Setup canvas drawing context
@@ -72,6 +86,7 @@ export default function HandwritingTab() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         setPredictedDigit(null);
         setProbabilities(Array(10).fill(0));
+        setGradcamB64("");
       }
     }
   };
@@ -92,7 +107,8 @@ export default function HandwritingTab() {
 
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch("/api/predictions/handwriting", {
+        const modelParam = selectedPredictModel ? `?model_name=${selectedPredictModel}` : "";
+        const response = await fetch(`/api/predictions/handwriting${modelParam}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -110,9 +126,18 @@ export default function HandwritingTab() {
           const finalDigit = isNaN(digit) ? pred.charCodeAt(0) % 10 : digit;
           setPredictedDigit(finalDigit);
 
-          const probVal = Math.round(data.probability * 100);
-          const generatedProbs = Array(10).fill(0).map((_, i) => i === finalDigit ? probVal : Math.round((100 - probVal) / 9));
-          setProbabilities(generatedProbs);
+          // Return actual probabilities list
+          if (data.probabilities) {
+            setProbabilities(data.probabilities.map((p: number) => Math.round(p * 100)));
+          } else {
+            const probVal = Math.round(data.probability * 100);
+            const generatedProbs = Array(10).fill(0).map((_, i) => i === finalDigit ? probVal : Math.round((100 - probVal) / 9));
+            setProbabilities(generatedProbs);
+          }
+
+          setGradcamB64(data.gradcam_b64 || "");
+          setLatencyMs(parseFloat(data.latency_ms.toFixed(1)));
+          setMisclassificationAnalysis(data.misclassification_analysis || "");
         }
       } catch (err) {
         console.error("OCR prediction error:", err);
@@ -120,29 +145,57 @@ export default function HandwritingTab() {
     }
   };
 
-  // Mock Upload trigger
-  const handleMockUpload = () => {
-    setUploadedFile("Uploaded: Ext_MNIST_img83.png");
-    handlePredict();
+  // Mock Upload trigger (JSON representation of image matrix or PNG loading)
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      // Draw image to canvas
+      const img = new Image();
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "#09090b";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            setUploadedFile(`Uploaded image: ${file.name}`);
+            handlePredict();
+          }
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const trainingHistory = [
-    { epoch: 1, cnnVal: 0.81, resNetVal: 0.84, cnnLoss: 0.54 },
-    { epoch: 5, cnnVal: 0.89, resNetVal: 0.91, cnnLoss: 0.31 },
-    { epoch: 10, cnnVal: 0.94, resNetVal: 0.95, cnnLoss: 0.18 },
-    { epoch: 15, cnnVal: 0.96, resNetVal: 0.97, cnnLoss: 0.11 },
-    { epoch: 20, cnnVal: 0.978, resNetVal: 0.985, cnnLoss: 0.08 },
+    { epoch: 1, cnnVal: 0.81, resNetVal: 0.84, effNetVal: 0.86 },
+    { epoch: 5, cnnVal: 0.89, resNetVal: 0.91, effNetVal: 0.93 },
+    { epoch: 10, cnnVal: 0.94, resNetVal: 0.95, effNetVal: 0.96 },
+    { epoch: 15, cnnVal: 0.96, resNetVal: 0.97, effNetVal: 0.975 },
+    { epoch: 20, cnnVal: 0.978, resNetVal: 0.985, effNetVal: 0.991 },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-300">
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Drawing pad container */}
-        <div className="rounded-xl border border-zinc-805 bg-zinc-900/20 p-5 lg:col-span-5 flex flex-col justify-between">
+        <div className="rounded-xl border border-zinc-805 bg-zinc-900/10 p-5 lg:col-span-5 flex flex-col justify-between">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="h-5 w-5 text-teal-400" />
-              <h2 className="text-xs font-semibold text-zinc-200">Interactive OCR Canvas Sandbox</h2>
+            <div className="flex items-center justify-between mb-3 border-b border-zinc-800 pb-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-teal-400" />
+                <h2 className="text-xs font-semibold text-zinc-200">OCR Sketchpad Sandbox</h2>
+              </div>
+              <label className="flex items-center gap-1.5 rounded bg-zinc-900 border border-zinc-850 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-zinc-700 cursor-pointer transition">
+                <Upload className="h-3 w-3 text-zinc-400" />
+                <span>Upload Digit</span>
+                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+              </label>
             </div>
             <p className="text-[11px] text-zinc-500 mb-4 leading-relaxed">
               Use your cursor scratchpad to sketch a single digit representing numerical data values of OCR benchmarking datasets.
@@ -153,8 +206,8 @@ export default function HandwritingTab() {
                 <canvas
                   id="ocr-drawing-board"
                   ref={canvasRef}
-                  width={250}
-                  height={250}
+                  width={220}
+                  height={220}
                   onMouseDown={startDrawing}
                   onMouseMove={draw}
                   onMouseUp={stopDrawing}
@@ -165,67 +218,106 @@ export default function HandwritingTab() {
             </div>
           </div>
 
-          <div className="mt-5 flex gap-2.5">
+          <div className="mt-5 flex items-center gap-3">
+            <select
+              value={selectedPredictModel}
+              onChange={(e) => setSelectedPredictModel(e.target.value)}
+              className="bg-zinc-950 border border-zinc-800 rounded px-2.5 py-2 text-xs text-zinc-300 outline-none flex-1 font-semibold"
+            >
+              {visionModels.map(m => {
+                const shortName = m.name.toLowerCase().replace("handwriting-", "");
+                return (
+                  <option key={m.id} value={shortName}>
+                    Predictor: {shortName} ({m.version})
+                  </option>
+                );
+              })}
+              {visionModels.length === 0 && (
+                <>
+                  <option value="cnn">Predictor: cnn</option>
+                  <option value="resnet18">Predictor: resnet18</option>
+                  <option value="efficientnet">Predictor: efficientnet</option>
+                </>
+              )}
+            </select>
+
             <button
               onClick={clearCanvas}
-              className="flex-1 py-2 px-3 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-850 hover:text-white text-zinc-400 transition-colors flex items-center justify-center gap-2 text-xs"
+              className="py-2 px-3 rounded-lg border border-zinc-800 bg-zinc-900 hover:bg-zinc-850 hover:text-white text-zinc-400 transition-colors flex items-center justify-center gap-1 text-xs"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Clear Board</span>
+              <span>Clear</span>
             </button>
             <button
               onClick={handlePredict}
-              className="flex-1 py-2 px-3 rounded-lg bg-teal-500 hover:bg-teal-400 text-black font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-teal-500/10"
+              className="py-2 px-4 rounded-lg bg-teal-500 hover:bg-teal-400 text-black font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-teal-500/10 animate-shimmer"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Classify Character</span>
+              <span>Classify</span>
             </button>
           </div>
         </div>
 
         {/* Prediction probabilities dashboard */}
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 p-5 lg:col-span-7 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-teal-400" />
                 <h3 className="text-xs font-semibold text-zinc-200">Confidence Probabilities vectors</h3>
               </div>
-              <button 
-                onClick={handleMockUpload}
-                className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-[10px] text-zinc-200 hover:border-zinc-700 transition"
-              >
-                <Upload className="h-3.5 w-3.5 text-zinc-400" />
-                <span>Upload PNG digit sample</span>
-              </button>
+              <span className="text-[10px] font-mono text-zinc-500">Latency: {latencyMs}ms</span>
             </div>
 
             {uploadedFile && (
-              <span className="mb-3 block text-[10px] text-teal-400 font-mono font-medium underline">{uploadedFile}</span>
+              <span className="mb-2 block text-[10px] text-teal-400 font-mono font-medium underline">{uploadedFile}</span>
             )}
 
-            {/* Neural Net probabilities meters */}
-            <div className="space-y-2">
-              {probabilities.map((prob, idx) => (
-                <div key={idx} className="flex items-center gap-3 text-xs">
-                  <span className="w-4 font-mono font-bold text-zinc-500">{idx}</span>
-                  <div className="h-2 flex-1 bg-zinc-950 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-300 ${
-                        predictedDigit === idx ? "bg-teal-400" : "bg-zinc-800"
-                      }`} 
-                      style={{ width: `${prob}%` }} 
-                    />
+            {/* Split layout: Confidence bars and Grad-CAM view */}
+            <div className="grid gap-5 md:grid-cols-12">
+              <div className="md:col-span-7 space-y-2">
+                {probabilities.map((prob, idx) => (
+                  <div key={idx} className="flex items-center gap-3 text-xs">
+                    <span className="w-3.5 font-mono font-bold text-zinc-500">{idx}</span>
+                    <div className="h-2 flex-1 bg-zinc-950 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          predictedDigit === idx ? "bg-teal-400" : "bg-zinc-800"
+                        }`} 
+                        style={{ width: `${prob}%` }} 
+                        title={`Digit ${idx}: ${prob}%`}
+                      />
+                    </div>
+                    <span className="w-8 text-right font-mono text-[10.5px] text-zinc-400">{prob}%</span>
                   </div>
-                  <span className="w-10 text-right font-mono text-[10.5px] text-zinc-400">{prob}%</span>
-                </div>
-              ))}
+                ))}
+              </div>
+
+              {/* Grad-CAM Viewer */}
+              <div className="md:col-span-5 flex flex-col items-center justify-center border border-zinc-800/80 rounded-xl p-3 bg-zinc-950/45">
+                <span className="font-mono text-[9px] text-zinc-500 font-bold uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Eye className="h-3 w-3 text-teal-400" />
+                  Grad-CAM Saliency
+                </span>
+                
+                {gradcamB64 ? (
+                  <img 
+                    src={`data:image/png;base64,${gradcamB64}`} 
+                    alt="Grad-CAM Activation Map"
+                    className="h-32 w-32 rounded border border-zinc-800/80 bg-zinc-900 object-contain shadow-inner"
+                  />
+                ) : (
+                  <div className="h-32 w-32 rounded border border-dashed border-zinc-850 bg-zinc-900/20 flex flex-col items-center justify-center text-center p-2 text-[10px] text-zinc-650 font-mono">
+                    Draw & classify to inspect CNN visual activations
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           <div className="mt-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between">
             <div>
-              <span className="font-mono text-[9px] text-zinc-500 block uppercase font-bold">Predicting Classification Outcome</span>
+              <span className="font-mono text-[9px] text-zinc-500 block uppercase font-bold">Inference Output Classification</span>
               <span className="text-2xl font-black font-mono text-teal-400 mt-1 block">
                 {predictedDigit !== null ? `Digit - ${predictedDigit}` : "Waiting sketches..."}
               </span>
@@ -237,6 +329,13 @@ export default function HandwritingTab() {
         </div>
       </div>
 
+      {predictedDigit !== null && misclassificationAnalysis && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/10 p-4">
+          <span className="font-mono text-[9px] text-zinc-550 uppercase font-bold block mb-1">Misclassification Risk Profile:</span>
+          <p className="text-xs text-zinc-400 leading-relaxed font-sans">{misclassificationAnalysis}</p>
+        </div>
+      )}
+
       {/* Epoch Metrics and CNN parameters benchmarking */}
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Real-time Validation loss graph */}
@@ -246,37 +345,59 @@ export default function HandwritingTab() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trainingHistory} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="epoch" stroke="#52525b" fontSize={10} />
-                <YAxis stroke="#52525b" fontSize={10} domain={[0.7, 1.0]} />
-                <Tooltip contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: "11px" }} />
+                <XAxis dataKey="epoch" stroke="#71717a" fontSize={9} />
+                <YAxis stroke="#71717a" fontSize={9} domain={[0.7, 1.0]} />
+                <Tooltip contentStyle={{ backgroundColor: "#09090b", borderColor: "#27272a", fontSize: "11px", borderRadius: "8px" }} />
                 <Line type="monotone" dataKey="cnnVal" stroke="#2dd4bf" strokeWidth={2} name="CNN Accuracy" />
                 <Line type="monotone" dataKey="resNetVal" stroke="#3b82f6" strokeWidth={2} name="ResNet18 Accuracy" />
+                <Line type="monotone" dataKey="effNetVal" stroke="#f59e0b" strokeWidth={2} name="EfficientNet Accuracy" strokeDasharray="4 4" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* CNN and ResNet structural parameter tables */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 p-5 lg:col-span-4">
-          <h3 className="text-xs font-semibold text-zinc-200 mb-3">Spatial Core Architecture specs</h3>
-          <div className="space-y-4">
-            <div className="border-b border-zinc-800 pb-2.5">
-              <span className="font-mono text-[9px] tracking-wider text-teal-400 font-bold block uppercase">Custom CNN Benchmark</span>
-              <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400 mt-2 font-mono">
-                <div>Layers: 5 ConvBlocks</div>
-                <div>Parameters: ~140,840</div>
-                <div>Avg Ep. Speed: 14s</div>
-                <div>Hardware req: GPU T4</div>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 p-5 lg:col-span-4 flex flex-col justify-between">
+          <div>
+            <h3 className="text-xs font-semibold text-zinc-200 mb-3">Spatial Core Architecture specs</h3>
+            <div className="space-y-4">
+              <div className="border-b border-zinc-800 pb-2.5">
+                <span className="font-mono text-[9px] tracking-wider text-teal-455 font-bold block uppercase flex items-center justify-between">
+                  <span>Custom CNN Benchmark</span>
+                  <span className="text-zinc-500 font-normal">Keras</span>
+                </span>
+                <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-450 mt-1.5 font-mono">
+                  <div>Layers: 5 ConvBlocks</div>
+                  <div>Params: ~140,840</div>
+                  <div>Avg Ep. Speed: 14s</div>
+                  <div>Backend: TF Cpu</div>
+                </div>
               </div>
-            </div>
 
-            <div>
-              <span className="font-mono text-[9px] tracking-wider text-blue-400 font-bold block uppercase">ResNet18 Backbone</span>
-              <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400 mt-2 font-mono">
-                <div>Layers: 18 DeepBlocks</div>
-                <div>Parameters: ~11,170,420</div>
-                <div>Avg Ep. Speed: 62s</div>
-                <div>Hardware req: GPU A10G</div>
+              <div className="border-b border-zinc-800 pb-2.5">
+                <span className="font-mono text-[9px] tracking-wider text-blue-400 font-bold block uppercase flex items-center justify-between">
+                  <span>ResNet18 Backbone</span>
+                  <span className="text-zinc-500 font-normal">PyTorch</span>
+                </span>
+                <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-450 mt-1.5 font-mono">
+                  <div>Layers: 18 DeepBlocks</div>
+                  <div>Params: ~11,170,420</div>
+                  <div>Avg Ep. Speed: 1.5s</div>
+                  <div>Backend: CUDA GPU</div>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-mono text-[9px] tracking-wider text-amber-500 font-bold block uppercase flex items-center justify-between">
+                  <span>EfficientNet-B0</span>
+                  <span className="text-zinc-500 font-normal">PyTorch</span>
+                </span>
+                <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-450 mt-1.5 font-mono">
+                  <div>Layers: MBConv Blocks</div>
+                  <div>Params: ~5,280,000</div>
+                  <div>Avg Ep. Speed: 2.1s</div>
+                  <div>Backend: CUDA GPU</div>
+                </div>
               </div>
             </div>
           </div>

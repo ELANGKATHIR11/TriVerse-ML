@@ -53,6 +53,7 @@ class CreditOptunaOptimizer:
         "random_forest": "_objective_random_forest",
         "catboost": "_objective_catboost",
         "mlp": "_objective_mlp",
+        "tabnet": "_objective_tabnet",
     }
 
     def __init__(
@@ -284,3 +285,33 @@ class CreditOptunaOptimizer:
             cv=self._cv, scoring="roc_auc", n_jobs=1,  # MLP not safe with n_jobs=-1 in CV
         )
         return float(1.0 - scores.mean())
+
+    def _objective_tabnet(self, trial: optuna.Trial) -> float:
+        n_d = trial.suggest_categorical("n_d", [8, 16, 32])
+        n_a = trial.suggest_categorical("n_a", [8, 16, 32])
+        n_steps = trial.suggest_int("n_steps", 2, 4)
+        gamma = trial.suggest_float("gamma", 1.0, 1.8)
+        lr = trial.suggest_float("lr", 1e-3, 5e-2, log=True)
+        epochs = trial.suggest_int("epochs", 5, 20)
+
+        from sklearn.model_selection import train_test_split
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            self.X_train, self.y_train,
+            test_size=0.2, random_state=42, stratify=self.y_train,
+        )
+
+        from app.ml.credit.credit_tabnet_trainer import TabNetClassifier
+        model = TabNetClassifier(
+            input_dim=self.X_train.shape[1],
+            n_d=n_d,
+            n_a=n_a,
+            n_steps=n_steps,
+            gamma=gamma,
+            lr=lr,
+            epochs=epochs,
+            batch_size=256
+        )
+        model.fit(X_tr, y_tr)
+        y_proba = model.predict_proba(X_val)[:, 1]
+        auc = roc_auc_score(y_val, y_proba)
+        return float(1.0 - auc)

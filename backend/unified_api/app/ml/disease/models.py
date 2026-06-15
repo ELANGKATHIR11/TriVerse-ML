@@ -84,6 +84,7 @@ class DiseaseModelTrainer:
         "xgboost",
         "catboost",
         "mlp",
+        "ft_transformer",
     ]
 
     def __init__(
@@ -111,7 +112,7 @@ class DiseaseModelTrainer:
         ws_callback: Callable[[dict], Awaitable[None]] | None = None,
     ) -> list[ModelResult]:
         """
-        Train all 6 models sequentially.
+        Train all 7 models sequentially.
 
         Parameters
         ----------
@@ -181,6 +182,7 @@ class DiseaseModelTrainer:
             "xgboost": self._train_xgboost,
             "catboost": self._train_catboost,
             "mlp": self._train_mlp,
+            "ft_transformer": self._train_ft_transformer,
         }
         if model_name not in dispatch:
             raise ValueError(f"Unknown model '{model_name}'. Choose from {list(dispatch)}")
@@ -188,6 +190,11 @@ class DiseaseModelTrainer:
         fn = dispatch[model_name]
         result = await _run_in_executor(fn, hyperparams)
         return result
+
+    def _train_ft_transformer(self, hyperparams: dict | None = None) -> ModelResult:
+        from app.ml.disease.disease_fttransformer_trainer import DiseaseFTTransformerTrainer
+        trainer = DiseaseFTTransformerTrainer(self.X_train, self.X_test, self.y_train, self.y_test, self.feature_names, self.dataset_name)
+        return trainer.train(hyperparams)
 
     # ------------------------------------------------------------------
     # Individual model trainers (sync)

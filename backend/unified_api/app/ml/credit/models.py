@@ -81,6 +81,7 @@ class CreditModelTrainer:
         "random_forest",
         "catboost",
         "mlp",
+        "tabnet",
     ]
 
     def __init__(
@@ -109,7 +110,7 @@ class CreditModelTrainer:
         ws_callback: Callable[[dict], Awaitable[None]] | None = None,
     ) -> list[ModelResult]:
         """
-        Train all 5 models sequentially.
+        Train all 6 models sequentially.
 
         Parameters
         ----------
@@ -164,7 +165,7 @@ class CreditModelTrainer:
         ----------
         model_name:
             One of ``logistic_regression``, ``decision_tree``, ``random_forest``,
-            ``catboost``, ``mlp``.
+            ``catboost``, ``mlp``, ``tabnet``.
         hyperparams:
             Optional dict of hyperparameters to override defaults.
 
@@ -178,6 +179,7 @@ class CreditModelTrainer:
             "random_forest": self._train_random_forest,
             "catboost": self._train_catboost,
             "mlp": self._train_mlp,
+            "tabnet": self._train_tabnet,
         }
         if model_name not in dispatch:
             raise ValueError(f"Unknown model '{model_name}'. Choose from {list(dispatch)}")
@@ -185,6 +187,11 @@ class CreditModelTrainer:
         fn = dispatch[model_name]
         result = await _run_in_executor(fn, hyperparams)
         return result
+
+    def _train_tabnet(self, hyperparams: dict | None = None) -> ModelResult:
+        from app.ml.credit.credit_tabnet_trainer import CreditTabNetTrainer
+        trainer = CreditTabNetTrainer(self.X_train, self.X_test, self.y_train, self.y_test, self.feature_names, self.preprocessor)
+        return trainer.train(hyperparams)
 
     # ------------------------------------------------------------------
     # Individual model trainers (sync)

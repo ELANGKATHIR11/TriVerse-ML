@@ -18,14 +18,40 @@ export default function OverviewTab() {
   const { experiments, models, setActiveTab, searchQuery } = useAppStore();
   const [filterStatus, setFilterStatus] = useState<string>("All");
 
+  // Helper to detect advanced models
+  const isAdvanced = (name: string) => {
+    const ln = name.toLowerCase();
+    return ln.includes("tabnet") || ln.includes("ft_transformer") || ln.includes("ft-transformer") || ln.includes("efficientnet") || ln.includes("transformer");
+  };
+
   // KPI calculations
   const totalExps = experiments.length;
   const totalModels = models.length;
-  
   const completedExps = experiments.filter(e => e.status === "Completed").length;
-  const bestAccuracy = totalModels > 0 ? Math.max(...models.map(m => m.accuracy)) * 100 : 0;
-  const bestModelName = totalModels > 0 ? models.reduce((prev, current) => (prev.accuracy > current.accuracy) ? prev : current).name : "No Models Trained";
-  const latestExp = experiments[0];
+
+  const creditModels = models.filter(m => m.task === "Credit Scoring");
+  const diseaseModels = models.filter(m => m.task === "Disease Prediction");
+  const visionModels = models.filter(m => m.task === "Handwriting Recognition");
+
+  // Find Best Legacy and Advanced models
+  const legacyModels = models.filter(m => !isAdvanced(m.name));
+  const advancedModels = models.filter(m => isAdvanced(m.name));
+
+  const bestLegacy = legacyModels.length > 0 ? legacyModels.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+  const bestAdvanced = advancedModels.length > 0 ? advancedModels.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+
+  // Winners per task
+  const creditWinner = creditModels.length > 0 ? creditModels.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+  const diseaseWinner = diseaseModels.length > 0 ? diseaseModels.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+  const visionWinner = visionModels.length > 0 ? visionModels.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+
+  // Global Champion (Highest accuracy)
+  const globalChamp = models.length > 0 ? models.reduce((p, c) => p.accuracy > c.accuracy ? p : c) : null;
+
+  // Specialized leaders
+  const fastestModel = models.length > 0 ? models.reduce((p, c) => p.inferenceTimeMs < c.inferenceTimeMs ? p : c) : null;
+  const lowestMemoryModel = models.length > 0 ? models.reduce((p, c) => p.memoryMb < c.memoryMb ? p : c) : null;
+  const highestExplainable = models.length > 0 ? models.reduce((p, c) => p.explainabilityScore > c.explainabilityScore ? p : c) : null;
 
   // Map charts data
   const trendData = [
@@ -35,15 +61,15 @@ export default function OverviewTab() {
     { name: "Thu", CreditGuard: 0.92, CardioScan: 0.87, HandScribe: 0.96 },
     { name: "Fri", CreditGuard: 0.94, CardioScan: 0.89, HandScribe: 0.97 },
     { name: "Sat", CreditGuard: 0.94, CardioScan: 0.90, HandScribe: 0.97 },
-    { name: "Sun", CreditGuard: 0.941, CardioScan: 0.898, HandScribe: 0.978 },
+    { name: "Sun", CreditGuard: (globalChamp?.accuracy ?? 0.941), CardioScan: (diseaseWinner?.accuracy ?? 0.898), HandScribe: (visionWinner?.accuracy ?? 0.978) },
   ];
 
-  const resourceData = [
-    { name: "CreditGuard-ResNet18", CPU: 65, RAM: 45, GPU: 85 },
-    { name: "CardioScan-XGBoost", CPU: 12, RAM: 15, GPU: 0 },
-    { name: "HandScribe-CNN", CPU: 40, RAM: 30, GPU: 65 },
-    { name: "Credit-LightGBM", CPU: 22, RAM: 18, GPU: 0 },
-  ];
+  const resourceData = models.map(m => ({
+    name: m.name.substring(0, 15),
+    CPU: m.name.toLowerCase().includes("cnn") ? 40 : 15,
+    RAM: Math.round(m.memoryMb / 3),
+    GPU: isAdvanced(m.name) ? 80 : 0
+  })).slice(0, 5);
 
   const filteredExperiments = experiments.filter(e => {
     const matchesSearch = e.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -54,69 +80,105 @@ export default function OverviewTab() {
 
   return (
     <div className="space-y-6">
+      {/* Target Champion Summary Row */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="glass-panel p-4 border-l-4 border-l-teal-500 hover:bg-white/5 transition-all">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold font-mono">Credit scoring Winner</div>
+          <div className="text-lg font-semibold text-white mt-1 truncate">{creditWinner ? creditWinner.name : "None"}</div>
+          <div className="text-xs text-teal-400 font-mono mt-0.5">Acc: {creditWinner ? (creditWinner.accuracy * 100).toFixed(1) : 0}%</div>
+        </div>
+        <div className="glass-panel p-4 border-l-4 border-l-blue-500 hover:bg-white/5 transition-all">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold font-mono">Disease Prediction Winner</div>
+          <div className="text-lg font-semibold text-white mt-1 truncate">{diseaseWinner ? diseaseWinner.name : "None"}</div>
+          <div className="text-xs text-blue-400 font-mono mt-0.5">Acc: {diseaseWinner ? (diseaseWinner.accuracy * 100).toFixed(1) : 0}%</div>
+        </div>
+        <div className="glass-panel p-4 border-l-4 border-l-purple-500 hover:bg-white/5 transition-all">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold font-mono">Vision recognition Winner</div>
+          <div className="text-lg font-semibold text-white mt-1 truncate">{visionWinner ? visionWinner.name : "None"}</div>
+          <div className="text-xs text-purple-400 font-mono mt-0.5">Acc: {visionWinner ? (visionWinner.accuracy * 100).toFixed(1) : 0}%</div>
+        </div>
+        <div className="glass-panel p-4 border-l-4 border-l-amber-500 bg-amber-500/5 hover:bg-amber-500/10 transition-all">
+          <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold font-mono">Global platform Champion</div>
+          <div className="text-lg font-semibold text-white mt-1 truncate">{globalChamp ? globalChamp.name : "None"}</div>
+          <div className="text-xs text-amber-400 font-mono mt-0.5">Acc: {globalChamp ? (globalChamp.accuracy * 100).toFixed(1) : 0}%</div>
+        </div>
+      </div>
+
       {/* KPI Cards section */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
         <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total Experiments</span>
-            <Layers className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-tight text-white">{totalExps}</span>
-            <span className="text-[10px] text-cyan-450 font-mono font-medium">+{completedExps} done</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Trained Models</span>
-            <Cpu className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-tight text-white">{totalModels}</span>
-            <span className="text-[10px] text-slate-400 font-mono">4 active production</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Best Peak Accuracy</span>
-            <Trophy className="h-4 w-4 text-amber-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-tight text-white">{bestAccuracy.toFixed(1)}%</span>
-            <span className="text-[10px] text-slate-400 font-mono">HandScribe</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Active Catalog</span>
-            <Database className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-sm font-semibold tracking-tight text-slate-200 truncate">FICO, MIMIC-IV</span>
-            <span className="text-[9px] text-cyan-400 font-mono font-medium">3 sets</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Champion Model</span>
-            <Target className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
-          </div>
-          <div className="mt-3">
-            <span className="text-[11px] font-semibold tracking-tight text-slate-300 block truncate">{bestModelName}</span>
-          </div>
-        </div>
-
-        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 font-bold">Latest Pipeline Run</span>
-            <Clock className="h-4 w-4 text-cyan-400 group-hover:scale-110 transition-transform" />
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Best Legacy Model</span>
+            <Trophy className="h-3.5 w-3.5 text-slate-400" />
           </div>
           <div className="mt-2 flex flex-col">
-            <span className="text-xs font-semibold tracking-tight text-white truncate">{latestExp?.name}</span>
+            <span className="text-lg font-semibold text-white truncate">{bestLegacy ? bestLegacy.name : "N/A"}</span>
+            <span className="text-[10px] text-slate-400 font-mono">Acc: {bestLegacy ? (bestLegacy.accuracy * 100).toFixed(1) : 0}%</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Best Advanced Model</span>
+            <Trophy className="h-3.5 w-3.5 text-cyan-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-lg font-semibold text-white truncate">{bestAdvanced ? bestAdvanced.name : "N/A"}</span>
+            <span className="text-[10px] text-cyan-400 font-mono">Acc: {bestAdvanced ? (bestAdvanced.accuracy * 100).toFixed(1) : 0}%</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Fastest Inference</span>
+            <Clock className="h-3.5 w-3.5 text-green-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-lg font-semibold text-white truncate">{fastestModel ? fastestModel.name : "N/A"}</span>
+            <span className="text-[10px] text-green-450 font-mono">{fastestModel ? fastestModel.inferenceTimeMs.toFixed(2) : 0} ms</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Most Efficient</span>
+            <Cpu className="h-3.5 w-3.5 text-purple-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-lg font-semibold text-white truncate">{lowestMemoryModel ? lowestMemoryModel.name : "N/A"}</span>
+            <span className="text-[10px] text-purple-400 font-mono">{lowestMemoryModel ? lowestMemoryModel.memoryMb : 0} MB RAM</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Explainability Leader</span>
+            <Target className="h-3.5 w-3.5 text-amber-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-lg font-semibold text-white truncate">{highestExplainable ? highestExplainable.name : "N/A"}</span>
+            <span className="text-[10px] text-amber-400 font-mono">Score: {highestExplainable ? highestExplainable.explainabilityScore : 0}/100</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Active Catalog</span>
+            <Database className="h-3.5 w-3.5 text-slate-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-sm font-semibold text-slate-200 truncate">FICO, Heart, MNIST</span>
+            <span className="text-[9px] text-cyan-400 font-mono font-medium">6 sub-datasets</span>
+          </div>
+        </div>
+
+        <div className="glass-panel p-4 relative overflow-hidden group hover:bg-white/10 transition-all duration-200">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400 font-bold">Pipeline Execs</span>
+            <Layers className="h-3.5 w-3.5 text-slate-400" />
+          </div>
+          <div className="mt-2 flex flex-col">
+            <span className="text-lg font-semibold text-white">{totalExps} Runs</span>
             <span className="text-[9px] text-slate-400 font-mono uppercase mt-0.5">{latestExp?.status}</span>
           </div>
         </div>

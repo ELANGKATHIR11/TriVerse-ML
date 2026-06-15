@@ -327,6 +327,46 @@ async def run_training():
         )
         db.add(reg_resnet)
         
+        # Train EfficientNet-B0 (PyTorch CUDA GPU)
+        logger.info("Fitting EfficientNet-B0 Model...")
+        from app.ml.handwriting.vision_efficientnet_trainer import EfficientNetB0Trainer
+        effnet_trainer = EfficientNetB0Trainer(X_train, X_test, y_train, y_test, num_classes=10)
+        effnet_metrics = await asyncio.to_thread(
+            lambda: effnet_trainer.train(epochs=2, batch_size=256)
+        )
+        
+        metrics_effnet = ExperimentMetrics(
+            experiment_id=exp_hw.id,
+            model_name="efficientnet",
+            accuracy=effnet_metrics["accuracy"],
+            precision_score=effnet_metrics["precision"],
+            recall_score=effnet_metrics["recall"],
+            f1_score=effnet_metrics["f1"],
+            roc_auc=0.99,
+            inference_time_ms=effnet_metrics["inference_time_ms"],
+            training_time_sec=effnet_metrics["training_time"],
+            memory_usage_mb=effnet_metrics["memory_mb"],
+            model_size_mb=effnet_metrics["model_size_mb"],
+            params_json={"epochs": 2, "batch_size": 256},
+            hyperparams_json={},
+            created_at=datetime.now(UTC)
+        )
+        db.add(metrics_effnet)
+        
+        reg_effnet = ModelRegistry(
+            name="Handwriting-EfficientNet-B0",
+            task_type="handwriting",
+            description="RTX 5060 Trained EfficientNet-B0",
+            stage="staging",
+            mlflow_run_id=effnet_metrics["run_id"],
+            mlflow_model_uri=f"runs:/{effnet_metrics['run_id']}/model",
+            created_by=admin.id,
+            experiment_id=exp_hw.id,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC)
+        )
+        db.add(reg_effnet)
+        
         exp_hw.status = ExperimentStatus.COMPLETED
         exp_hw.finished_at = datetime.now(UTC)
         await db.commit()

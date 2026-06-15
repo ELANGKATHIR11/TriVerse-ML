@@ -268,6 +268,94 @@ class HandwritingOptunaOptimizer:
         study.optimize(objective, n_trials=n_trials, timeout=timeout, show_progress_bar=False)
         return self._summarise_study(study)
 
+    def optimize_efficientnet(
+        self,
+        X_train: np.ndarray,
+        X_test: np.ndarray,
+        y_train: np.ndarray,
+        y_test: np.ndarray,
+        n_trials: int = 10,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+
+        num_classes = len(np.unique(y_train))
+        study_name = f"efficientnet_handwriting_{int(time.time())}"
+
+        study = optuna.create_study(
+            study_name=study_name,
+            direction="maximize",
+            sampler=TPESampler(seed=42),
+            storage=self.storage_url,
+            load_if_exists=False,
+        )
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Convert NHWC -> NCHW if needed
+        if X_train.shape[-1] == 1:
+            X_train_trans = np.transpose(X_train, (0, 3, 1, 2))
+            X_test_trans = np.transpose(X_test, (0, 3, 1, 2))
+        else:
+            X_train_trans = X_train
+            X_test_trans = X_test
+
+        X_train_t = torch.tensor(X_train_trans, dtype=torch.float32)
+        X_test_t = torch.tensor(X_test_trans, dtype=torch.float32)
+        y_train_t = torch.from_numpy(y_train.astype(np.int64))
+        y_test_t = torch.from_numpy(y_test.astype(np.int64))
+
+        def objective(trial: optuna.Trial) -> float:
+            lr = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
+            batch_size = trial.suggest_categorical("batch_size", [64, 128, 256])
+            epochs = trial.suggest_int("epochs", 3, 8)
+
+            try:
+                from app.ml.handwriting.vision_efficientnet_trainer import EfficientNetB0
+                model = EfficientNetB0(num_classes=num_classes).to(device)
+                optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+                criterion = torch.nn.CrossEntropyLoss()
+
+                train_ds = TensorDataset(X_train_t, y_train_t)
+                test_ds = TensorDataset(X_test_t, y_test_t)
+                train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+                test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False)
+
+                best_acc = 0.0
+                for epoch in range(epochs):
+                    model.train()
+                    for x_b, y_b in train_loader:
+                        x_b, y_b = x_b.to(device), y_b.to(device)
+                        optimizer.zero_grad()
+                        loss = criterion(model(x_b), y_b)
+                        loss.backward()
+                        optimizer.step()
+
+                    model.eval()
+                    correct, total = 0, 0
+                    with torch.no_grad():
+                        for x_b, y_b in test_loader:
+                            x_b, y_b = x_b.to(device), y_b.to(device)
+                            preds = model(x_b).argmax(dim=1)
+                            correct += (preds == y_b).sum().item()
+                            total += len(y_b)
+                    val_acc = correct / total
+                    if val_acc > best_acc:
+                        best_acc = val_acc
+
+                return float(best_acc)
+            except Exception as exc:
+                logger.warning("EfficientNet trial %d failed: %s", trial.number, exc)
+                return 0.0
+            finally:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                gc.collect()
+
+        study.optimize(objective, n_trials=n_trials, timeout=timeout, show_progress_bar=False)
+        return self._summarise_study(study)
+
     # ------------------------------------------------------------------
     # Shared summary helper
     # ------------------------------------------------------------------

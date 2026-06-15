@@ -405,7 +405,7 @@ async def _run_training(
                                     "val_acc": round(val_ac, 4),
                                     "timestamp": datetime.now(UTC).isoformat(),
                                 })
-                                               trainer = CNNTrainer(X_train, X_test, y_train, y_test, num_classes=10, ws_callback=ws_cb)
+                        trainer = CNNTrainer(X_train, X_test, y_train, y_test, num_classes=10, ws_callback=ws_cb)
                         metrics = await trainer.train(epochs=epochs, batch_size=batch_size)
                     elif model_name.lower() in ("resnet18", "resnet"):
                         from app.ml.handwriting.resnet_model import ResNet18Trainer

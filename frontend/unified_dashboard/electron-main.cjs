@@ -315,8 +315,18 @@ async function bootServices() {
   }
   await sleep(300);
 
-  // 6. Signal Ollama (non-blocking; OllamaClient handles this server-side)
-  setStatus('Connecting to Ollama (qwen2.5-coder:3b)…', 93);
+  // 6. Auto-start and Signal Ollama
+  setStatus('Checking Ollama status…', 90);
+  const ollamaOnline = await pollUntilReady('http://127.0.0.1:11434', 1500, 500);
+  if (!ollamaOnline) {
+    setStatus('Launching local Ollama server…', 92);
+    const localAppData = process.env.LOCALAPPDATA || '';
+    const ollamaDefaultPath = path.join(localAppData, 'Programs', 'Ollama', 'ollama.exe');
+    const ollamaExe = fs.existsSync(ollamaDefaultPath) ? ollamaDefaultPath : 'ollama';
+    spawnService('Ollama', ollamaExe, ['serve'], { cwd: ROOT });
+    await sleep(2500);
+  }
+  setStatus('Connecting to Ollama (qwen2.5-coder:3b)…', 95);
   await sleep(600);
   setStatus('All systems online — launching TriVerse AI…', 100);
   await sleep(800);

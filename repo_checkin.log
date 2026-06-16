@@ -52,3 +52,26 @@ operable program or batch file.
 [2026-06-15 16:54:20] Pushing changes to origin main...
 [2026-06-15 16:54:23] SUCCESS: Pushed changes to origin main.
 [2026-06-15 16:54:23] Repository check-in process finished.
+[2026-06-16 18:00:34] Starting repository check-in process...
+[2026-06-16 18:00:34] Checking Git Status...
+[2026-06-16 18:00:34] Found local changes/untracked files:
+[2026-06-16 18:00:34]  M repo_checkin.log
+[2026-06-16 18:00:34] Running backend tests...
+[2026-06-16 18:00:35] Test Output:
+[2026-06-16 18:00:35] 'chcp' is not recognized as an internal or external command,
+operable program or batch file.
+'chcp' is not recognized as an internal or external command,
+operable program or batch file.
+ERROR conda.cli.main_run:execute(142): `conda run pytest tests` failed. (See above for error)
+[2026-06-16 18:00:35] WARNING: Backend tests failed!
+[2026-06-16 18:00:35] Rebuilding frontend...
+[2026-06-16 18:00:36] Build Output:
+[2026-06-16 18:00:36] 
+> triverse-ml-dashboard@2.0.0 build
+> vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs
+
+'vite' is not recognized as an internal or external command,
+operable program or batch file.
+[2026-06-16 18:00:36] WARNING: Frontend build failed!
+[2026-06-16 18:00:36] Checking for changes to commit...
+[2026-06-16 18:00:36] Staging files...

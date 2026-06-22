@@ -20,24 +20,24 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b
 )
 
-:: 2. Check if dgpu-aiml environment exists
-echo Checking for conda environment 'dgpu-aiml'...
-conda env list | findstr "dgpu-aiml" >nul 2>&1
+:: 2. Check if dgpu-core environment exists
+echo Checking for conda environment 'dgpu-core'...
+conda env list | findstr "dgpu-core" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo [INFO] Environment 'dgpu-aiml' not found. Creating it now...
-    conda create -y -n dgpu-aiml python=3.11
+    echo [INFO] Environment 'dgpu-core' not found. Creating it now...
+    conda create -y -n dgpu-core python=3.11
     if %ERRORLEVEL% NEQ 0 (
         echo [ERROR] Failed to create conda environment!
         pause
         exit /b
     )
 ) else (
-    echo [OK] Conda environment 'dgpu-aiml' detected.
+    echo [OK] Conda environment 'dgpu-core' detected.
 )
 
 :: 3. Install/Update python requirements
 echo Installing/updating Python dependencies...
-conda run -n dgpu-aiml pip install -r backend\unified_api\requirements.txt
+conda run -n dgpu-core pip install -r backend\unified_api\requirements.txt
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Failed to install Python requirements!
     pause

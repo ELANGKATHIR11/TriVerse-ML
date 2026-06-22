@@ -39,7 +39,7 @@ $backendDir = Join-Path -Path $PSScriptRoot -ChildPath "backend\unified_api"
 Push-Location $backendDir
 try {
     # Run pytest inside the conda environment
-    $testResult = conda run -n dgpu-aiml pytest tests 2>&1
+    $testResult = conda run -n dgpu-core pytest tests 2>&1
     Log-Message "Test Output:"
     Log-Message ($testResult -join "`n")
     if ($LASTEXITCODE -ne 0) {

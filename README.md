@@ -39,7 +39,7 @@ graph TD
 | Task Folder | Source Code | Jupyter EDA | Unit Tests | Requirements |
 | :--- | :--- | :--- | :--- | :--- |
 | **[Task 1: Credit Scoring](./CodeAlpha_Task1_CreditScoring/)** | [src/](./CodeAlpha_Task1_CreditScoring/src/) | [notebooks/](./CodeAlpha_Task1_CreditScoring/notebooks/) | [tests/](./CodeAlpha_Task1_CreditScoring/tests/) | [requirements.txt](./CodeAlpha_Task1_CreditScoring/requirements.txt) |
-| **[Task 2: Emotion Recognition](./CodeAlpha_Task2_EmotionRecognition/)** | [src/](./CodeAlpha_Task2_EmotionRecognition/src/) | [notebooks/](./CodeAlpha_Task2_EmotionRecognition/notebooks/) | [tests/](./CodeAlpha_Task2_EmotionRecognition/tests/) | [requirements.txt](./CodeAlpha_Task2_EmotionRecognition/requirements.txt) |
+| **[Task 4: Disease Detection](./CodeAlpha_Task4_Disease%20Detuction/)** | [src/](./CodeAlpha_Task4_Disease%20Detuction/src/) | [notebooks/](./CodeAlpha_Task4_Disease%20Detuction/notebooks/) | [tests/](./CodeAlpha_Task4_Disease%20Detuction/tests/) | [requirements.txt](./CodeAlpha_Task4_Disease%20Detuction/requirements.txt) |
 | **[Task 3: Handwritten Recognition](./CodeAlpha_Task3_HandwrittenRecognition/)** | [src/](./CodeAlpha_Task3_HandwrittenRecognition/src/) | [notebooks/](./CodeAlpha_Task3_HandwrittenRecognition/notebooks/) | [tests/](./CodeAlpha_Task3_HandwrittenRecognition/tests/) | [requirements.txt](./CodeAlpha_Task3_HandwrittenRecognition/requirements.txt) |
 
 ---
@@ -97,7 +97,7 @@ Screenshots for each CodeAlpha task are documented in their respective subdirect
 
 ### Prerequisites
 - Windows OS (Runs on Nvidia RTX GPUs for optimized DL training)
-- **Miniconda** / **Anaconda** (Conda environment: `dgpu-aiml` with Python 3.11)
+- **Miniconda** / **Anaconda** (Conda environment: `dgpu-core` with Python 3.11)
 - **Node.js** 18+
 - **Ollama** (running locally with `ollama pull qwen2.5:7b` or similar)
 

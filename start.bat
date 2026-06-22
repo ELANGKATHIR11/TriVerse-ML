@@ -8,7 +8,7 @@ echo  ║                   Starting All Services...                   ║
 echo  ╚══════════════════════════════════════════════════════════════╝
 echo.
 
-SET CONDA_ENV=dgpu-aiml
+SET CONDA_ENV=dgpu-core
 SET PROJECT_DIR=%~dp0
 SET BACKEND_DIR=%PROJECT_DIR%backend\unified_api
 SET FRONTEND_DIR=%PROJECT_DIR%frontend\unified_dashboard

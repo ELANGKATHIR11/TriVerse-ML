@@ -1,6 +1,6 @@
-# CodeAlpha Task 2: Cardiovascular Disease Prediction using Machine Learning
+# CodeAlpha Task 4: Cardiovascular Disease Prediction using Machine Learning
 
-*(Structured under folder `CodeAlpha_Task2_EmotionRecognition` for internship submission mapping)*
+*(Structured under folder `CodeAlpha_Task4_Disease Detuction` for internship submission mapping)*
 
 An enterprise-grade clinical diagnostics decision support system leveraging biomarkers to forecast cardiovascular health risks.
 
@@ -41,7 +41,7 @@ The diagnostic pipeline consists of the following modular phases:
 ### Step 1: Clone the Repo
 ```bash
 git clone https://github.com/ELANGKATHIR11/TriVerse-ML.git
-cd TriVerse-ML/CodeAlpha_Task2_EmotionRecognition
+cd TriVerse-ML/"CodeAlpha_Task4_Disease Detuction"
 ```
 
 ### Step 2: Install Dependencies

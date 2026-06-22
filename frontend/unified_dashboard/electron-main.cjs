@@ -26,8 +26,8 @@ const { spawn } = require('child_process');
 const http   = require('http');
 
 // ── Absolute binary paths ─────────────────────────────────────────────────────
-const CONDA_SCRIPTS  = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-aiml\\Scripts';
-const CONDA_ROOT     = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-aiml';
+const CONDA_SCRIPTS  = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-core\\Scripts';
+const CONDA_ROOT     = 'C:\\Users\\elang\\Miniconda3\\envs\\dgpu-core';
 const PYTHON_EXE     = path.join(CONDA_ROOT,    'python.exe');
 const UVICORN_EXE    = path.join(CONDA_SCRIPTS, 'uvicorn.exe');
 const MLFLOW_EXE     = path.join(CONDA_SCRIPTS, 'mlflow.exe');
@@ -187,7 +187,7 @@ function getLoadingHtml() {
     <li class="step" id="s-ollama"><span class="dot"></span>Ollama — qwen2.5-coder:3b</li>
   </ul>
 </div>
-<div class="version">v2.0.0 &nbsp;·&nbsp; dgpu-aiml &nbsp;·&nbsp; RTX 5060</div>
+<div class="version">v2.0.0 &nbsp;·&nbsp; dgpu-core &nbsp;·&nbsp; RTX 5060</div>
 
 <script>
 try {

@@ -67,7 +67,7 @@ Models:
 * CatBoost
 * MLP
 
-### Task 2: Disease Prediction
+### Task 4: Disease Prediction
 
 Models:
 
